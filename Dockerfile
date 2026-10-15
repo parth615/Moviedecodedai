@@ -1,9 +1,12 @@
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
-# Install OpenSSL (needed for Prisma) and FFmpeg on modern Debian Bookworm
+# Install OpenSSL (for Prisma), FFmpeg, and Python (needed by youtube-dl-exec)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openssl ffmpeg ca-certificates && \
+    apt-get install -y --no-install-recommends openssl ffmpeg ca-certificates python3 python-is-python3 && \
     rm -rf /var/lib/apt/lists/*
+
+# Skip python check if youtube-dl binary is bundled
+ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=1
 
 WORKDIR /app
 
@@ -11,7 +14,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci || npm install
+RUN npm install
 
 # Copy project files
 COPY . .
