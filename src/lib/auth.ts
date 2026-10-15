@@ -36,5 +36,8 @@ export const authOptions: AuthOptions = {
       return token;
     },
   },
+  pages: {
+    signIn: '/',
+  },
   secret: process.env.NEXTAUTH_SECRET || "fallback_secret_for_dev",
 };
