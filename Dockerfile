@@ -1,7 +1,9 @@
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
-# Install OpenSSL (needed for Prisma) and FFmpeg
-RUN apt-get update && apt-get install -y openssl ffmpeg && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL (needed for Prisma) and FFmpeg on modern Debian Bookworm
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl ffmpeg ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -9,7 +11,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci || npm install
 
 # Copy project files
 COPY . .
