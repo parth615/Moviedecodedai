@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowRight, CheckCircle, Clock, XCircle, Play, AlertCircle, Zap, PauseCircle, TrendingUp } from 'lucide-react';
-
-const JOB_STATUS_COLORS: Record<string, string> = {
-  COMPLETED: '#10b981',
-  FAILED: '#ef4444',
-  PROCESSING: '#3b82f6',
-  PENDING: '#f59e0b',
-  RETRYING: '#f97316'
-};
+import { useState, useEffect } from 'react';
+import { 
+  Play, 
+  Clock, 
+  CheckCircle, 
+  ArrowRight, 
+  PauseCircle, 
+  Zap, 
+  Coins, 
+  Sparkles,
+  CreditCard
+} from 'lucide-react';
+import { UpiPaymentModal } from '@/components/UpiPaymentModal';
 
 const PIPELINE_STEPS = [
   { label: 'Ideas', icon: '💡' },
@@ -35,16 +38,33 @@ export function DashboardClient({ stats, isPaused }: {
   const [isGenerating, setIsGenerating] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
+  const [credits, setCredits] = useState<number>(0);
+  const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
 
-  const handleGenerate = async () => {
+  // Fetch live credits
+  useEffect(() => {
+    fetch('/api/user/credits')
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.credits === 'number') {
+          setCredits(data.credits);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const executeGenerate = async () => {
     setIsGenerating(true);
     setMessage('');
     try {
       const res = await fetch('/api/pipeline/generate', { method: 'POST' });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage('✓ Pipeline started! Topics are being generated in the background.');
+        setMessage('✓ Pipeline started! Topics and video are being generated in the background.');
         setMessageType('success');
+        setCredits((prev) => Math.max(0, prev - 1));
+      } else if (res.status === 402 || data.error?.includes('credit')) {
+        setIsUpiModalOpen(true);
       } else {
         setMessage(`✗ ${data.error || 'Failed to start pipeline.'}`);
         setMessageType('error');
@@ -58,7 +78,16 @@ export function DashboardClient({ stats, isPaused }: {
     }
   };
 
+  const handleGenerateClick = () => {
+    if (credits < 1) {
+      setIsUpiModalOpen(true);
+      return;
+    }
+    executeGenerate();
+  };
+
   const statCards = [
+    { name: 'Video Credits', value: `${credits} Left`, icon: Coins, color: '#eab308' },
     { name: 'Generated Today', value: stats.generated, icon: Play, color: '#3b82f6' },
     { name: 'Awaiting Approval', value: String(stats.pendingApproval), icon: Clock, color: '#f59e0b' },
     { name: 'Approved', value: String(stats.approved), icon: CheckCircle, color: '#10b981' },
@@ -67,15 +96,31 @@ export function DashboardClient({ stats, isPaused }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'white', margin: 0 }}>Dashboard</h1>
           <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '4px' }}>
-            Universal AI Content Engine — India-first short-form video automation
+            Universal AI Content Engine — Automated short-form video generation & YouTube distribution
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Top Up Button */}
+          <button
+            onClick={() => setIsUpiModalOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              background: 'rgba(38,226,0,0.1)', border: '1px solid rgba(38,226,0,0.3)',
+              borderRadius: '10px', padding: '10px 16px', color: '#26e200', fontSize: '13px', fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            <Coins size={16} />
+            <span>Top Up UPI (from ₹9)</span>
+          </button>
+
           {isPaused && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '6px',
@@ -86,25 +131,62 @@ export function DashboardClient({ stats, isPaused }: {
               AUTOMATION PAUSED
             </div>
           )}
+
           <button
-            onClick={handleGenerate}
+            onClick={handleGenerateClick}
             disabled={isGenerating || isPaused}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
-              background: isGenerating || isPaused ? '#374151' : 'linear-gradient(135deg, #3b82f6, #6366f1)',
-              color: 'white', border: 'none', borderRadius: '10px',
-              padding: '10px 20px', fontSize: '14px', fontWeight: 700,
+              background: isGenerating || isPaused ? '#374151' : 'linear-gradient(135deg, #26e200, #16a34a)',
+              color: 'black', border: 'none', borderRadius: '10px',
+              padding: '10px 20px', fontSize: '14px', fontWeight: 800,
               cursor: isGenerating || isPaused ? 'not-allowed' : 'pointer',
               opacity: isPaused ? 0.5 : 1,
-              boxShadow: '0 4px 15px rgba(59,130,246,0.3)',
+              boxShadow: '0 4px 15px rgba(38,226,0,0.3)',
               transition: 'all 0.2s'
             }}
           >
-            <Zap size={16} />
+            <Zap size={16} className="fill-black" />
             {isGenerating ? 'Generating...' : 'GENERATE VIRAL IDEAS'}
           </button>
         </div>
       </div>
+
+      {/* UPI Pay-As-You-Go Promo Banner if low on credits */}
+      {credits < 2 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(38,226,0,0.1), rgba(254,1,127,0.05))',
+          border: '2px solid rgba(38,226,0,0.3)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>⚡️</span>
+            <div>
+              <h3 style={{ color: 'white', fontWeight: 800, fontSize: '15px', margin: 0 }}>
+                Pay-As-You-Go: Recharges Start at Just ₹9 via UPI
+              </h3>
+              <p style={{ color: '#cbd5e1', fontSize: '13px', margin: '2px 0 0' }}>
+                Instant activation with Google Pay, PhonePe, Paytm, or CRED. No monthly commitments.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsUpiModalOpen(true)}
+            style={{
+              background: '#26e200', color: 'black', fontWeight: 800, fontSize: '13px',
+              padding: '8px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer'
+            }}
+          >
+            Recharge Now →
+          </button>
+        </div>
+      )}
 
       {/* Feedback message */}
       {message && (
@@ -121,7 +203,7 @@ export function DashboardClient({ stats, isPaused }: {
       )}
 
       {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         {statCards.map((stat) => (
           <div key={stat.name} style={{
             background: '#0f172a', border: '1px solid #1e293b',
@@ -137,7 +219,7 @@ export function DashboardClient({ stats, isPaused }: {
               </div>
               <div>
                 <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{stat.name}</p>
-                <p style={{ fontSize: '24px', fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{stat.value}</p>
+                <p style={{ fontSize: '22px', fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{stat.value}</p>
               </div>
             </div>
           </div>
@@ -147,7 +229,7 @@ export function DashboardClient({ stats, isPaused }: {
       {/* Pipeline Visualization */}
       <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', padding: '24px' }}>
         <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#cbd5e1', margin: '0 0 20px' }}>
-          Content Pipeline
+          Autonomous Pipeline Stages
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', overflowX: 'auto', gap: '4px' }}>
           {PIPELINE_STEPS.map((step, idx) => (
@@ -170,6 +252,18 @@ export function DashboardClient({ stats, isPaused }: {
           ))}
         </div>
       </div>
+
+      {/* Pay-As-You-Go UPI Modal */}
+      <UpiPaymentModal
+        isOpen={isUpiModalOpen}
+        onClose={() => setIsUpiModalOpen(false)}
+        reason="You need video generation credits before starting a new pipeline."
+        onSuccess={(newCredits) => {
+          setCredits(newCredits);
+          // Automatically trigger generation now that credits are loaded!
+          executeGenerate();
+        }}
+      />
 
     </div>
   );

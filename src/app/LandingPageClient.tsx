@@ -294,7 +294,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
             </div>
             
             <p className="text-[11px] text-slate-400 mt-4">
-              🎁 100 Free Generation Credits instantly upon Google sign-in. Zero credit card required.
+              ⚡ Pay-as-you-go via UPI (Google Pay, PhonePe, Paytm). Starting at just ₹9 per video. No monthly commitments.
             </p>
           </div>
 
@@ -324,7 +324,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
           <span>✦ ELEVENLABS NEURAL AUDIO</span>
           <span>✦ 50/50 SPLIT-SCREEN</span>
           <span>✦ AUTO YOUTUBE PUBLISH</span>
-          <span>✦ 100 FREE CREDITS</span>
+          <span>✦ UPI PAY-AS-YOU-GO (₹9)</span>
           <span>✦ ZERO CAMERA</span>
           <span>✦ ZERO MICROPHONE</span>
           <span>✦ 100% VIRAL SHORTS</span>
@@ -332,7 +332,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
           <span>✦ ELEVENLABS NEURAL AUDIO</span>
           <span>✦ 50/50 SPLIT-SCREEN</span>
           <span>✦ AUTO YOUTUBE PUBLISH</span>
-          <span>✦ 100 FREE CREDITS</span>
+          <span>✦ UPI PAY-AS-YOU-GO (₹9)</span>
         </div>
       </div>
 
@@ -503,13 +503,13 @@ export function LandingPageClient({ session }: LandingPageProps) {
           <span>✦ KINETIC ASS SUBTITLES</span>
           <span>✦ REAL TIME SCENE VISUALS</span>
           <span>✦ MULTI-TENANT STUDIO</span>
-          <span>✦ 100 FREE CREDITS</span>
+          <span>✦ UPI PAY-AS-YOU-GO (₹9)</span>
           <span>✦ AUTOMATED FFmpeg PIPELINE</span>
           <span>✦ PUBLIC YOUTUBE SHORTS</span>
           <span>✦ KINETIC ASS SUBTITLES</span>
           <span>✦ REAL TIME SCENE VISUALS</span>
           <span>✦ MULTI-TENANT STUDIO</span>
-          <span>✦ 100 FREE CREDITS</span>
+          <span>✦ UPI PAY-AS-YOU-GO (₹9)</span>
         </div>
       </div>
 
@@ -625,7 +625,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
               },
               {
                 q: "HOW MUCH DOES IT COST TO START?",
-                a: "Zero dollars upfront. You get 100 free credits upon signing in with Google so you can generate, review, and publish videos immediately without paying anything."
+                a: "Affordable Pay-As-You-Go! Generate videos from just ₹9 each using instant UPI (Google Pay, PhonePe, Paytm, CRED). Zero monthly subscriptions, zero lock-ins — top up only when you need videos."
               },
               {
                 q: "CAN I RUN THIS 24/7 ON THE CLOUD?",
@@ -668,7 +668,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
           </h2>
 
           <p className="text-base sm:text-xl font-bold text-[#ece1b2] max-w-xl mx-auto mb-10">
-            Sign in with your Google account, claim your 100 free credits, and render your first viral short in 60 seconds.
+            Sign in with Google, top up ₹9 via UPI, and generate your first viral short in 60 seconds.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -684,7 +684,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
                 onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
                 className="w-full sm:w-auto bg-[#fe017f] text-white text-base font-black px-10 py-5 rounded-xl border-4 border-black brutal-shadow-pink hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all uppercase tracking-wider cursor-pointer"
               >
-                CLAIM 100 FREE CREDITS NOW 🚀
+                GET STARTED FROM ₹9 VIA UPI 🚀
               </button>
             )}
           </div>

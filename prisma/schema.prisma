@@ -26,6 +26,7 @@ model User {
   sessions      Session[]
   topics        Topic[]
   credentials   OAuthCredential[]
+  payments      Payment[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -263,4 +264,21 @@ model OAuthCredential {
 
   // For multi-tenant, each user can have one youtube and one instagram
   @@unique([userId, provider])
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  userId          String
+  amount          Float
+  currency        String   @default("INR")
+  credits         Int
+  status          String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
+  method          String   @default("UPI")
+  utr             String?
+  packageId       String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

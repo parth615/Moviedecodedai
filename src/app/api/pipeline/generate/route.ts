@@ -23,12 +23,6 @@ export async function POST() {
       return NextResponse.json({ success: false, error: 'Automation is paused by admin.' }, { status: 403 });
     }
 
-    // Deduct 1 credit
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { credits: { decrement: 1 } }
-    });
-
     // ── Daily limit enforcement ─────────────────────────────────────────────
     const limit = parseInt(await getSetting('DAILY_VIDEO_LIMIT')) || 10;
     const todayStart = new Date();
@@ -44,6 +38,12 @@ export async function POST() {
         { status: 429 }
       );
     }
+
+    // Deduct 1 credit
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { credits: { decrement: 1 } }
+    });
 
     await enqueueJob('GENERATE_TOPICS', { userId: user.id });
 
