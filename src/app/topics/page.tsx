@@ -49,7 +49,7 @@ export default async function TopicsPage() {
         </div>
       )}
 
-      <div className="rounded-xl bg-slate-900 border border-slate-800 shadow overflow-hidden">
+      <div className="rounded-xl bg-slate-900 border border-slate-800 shadow overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-800">
           <thead className="bg-slate-900/50">
             <tr>

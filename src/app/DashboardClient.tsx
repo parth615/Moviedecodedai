@@ -9,8 +9,7 @@ import {
   PauseCircle, 
   Zap, 
   Coins, 
-  Sparkles,
-  CreditCard
+  Sparkles
 } from 'lucide-react';
 import { UpiPaymentModal } from '@/components/UpiPaymentModal';
 
@@ -87,7 +86,7 @@ export function DashboardClient({ stats, isPaused }: {
   };
 
   const statCards = [
-    { name: 'Video Credits', value: `${credits} Left`, icon: Coins, color: '#eab308' },
+    { name: 'Video Credits', value: `${credits} Left`, icon: Coins, color: '#26e200' },
     { name: 'Generated Today', value: stats.generated, icon: Play, color: '#3b82f6' },
     { name: 'Awaiting Approval', value: String(stats.pendingApproval), icon: Clock, color: '#f59e0b' },
     { name: 'Approved', value: String(stats.approved), icon: CheckCircle, color: '#10b981' },
@@ -95,93 +94,69 @@ export function DashboardClient({ stats, isPaused }: {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+    <div className="flex flex-col gap-6 sm:gap-8 w-full max-w-full overflow-hidden">
       
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'white', margin: 0 }}>Dashboard</h1>
-          <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '4px' }}>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-slate-400 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
             Universal AI Content Engine — Automated short-form video generation & YouTube distribution
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
           {/* Top Up Button */}
           <button
             onClick={() => setIsUpiModalOpen(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'rgba(38,226,0,0.1)', border: '1px solid rgba(38,226,0,0.3)',
-              borderRadius: '10px', padding: '10px 16px', color: '#26e200', fontSize: '13px', fontWeight: 700,
-              cursor: 'pointer'
-            }}
+            className="flex items-center justify-center gap-2 bg-[#26e200]/10 hover:bg-[#26e200]/20 border border-[#26e200]/30 rounded-xl px-4 py-2.5 text-[#26e200] text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm w-full sm:w-auto"
           >
             <Coins size={16} />
             <span>Top Up UPI (from ₹9)</span>
           </button>
 
           {isPaused && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: '8px', padding: '8px 14px', color: '#f87171', fontSize: '13px', fontWeight: 600
-            }}>
+            <div className="flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-xs sm:text-sm font-semibold">
               <PauseCircle size={16} />
-              AUTOMATION PAUSED
+              <span>AUTOMATION PAUSED</span>
             </div>
           )}
 
           <button
             onClick={handleGenerateClick}
             disabled={isGenerating || isPaused}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              background: isGenerating || isPaused ? '#374151' : 'linear-gradient(135deg, #26e200, #16a34a)',
-              color: 'black', border: 'none', borderRadius: '10px',
-              padding: '10px 20px', fontSize: '14px', fontWeight: 800,
-              cursor: isGenerating || isPaused ? 'not-allowed' : 'pointer',
-              opacity: isPaused ? 0.5 : 1,
-              boxShadow: '0 4px 15px rgba(38,226,0,0.3)',
-              transition: 'all 0.2s'
-            }}
+            className={`flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-black transition-all cursor-pointer shadow-lg w-full sm:w-auto ${
+              isGenerating || isPaused
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+                : 'bg-gradient-to-r from-[#26e200] to-[#16a34a] hover:from-[#20be00] hover:to-[#15803d] text-black shadow-[0_4px_20px_rgba(38,226,0,0.3)] active:scale-[0.98]'
+            }`}
           >
             <Zap size={16} className="fill-black" />
-            {isGenerating ? 'Generating...' : 'GENERATE VIRAL IDEAS'}
+            <span>{isGenerating ? 'Generating...' : 'GENERATE VIRAL IDEAS'}</span>
           </button>
         </div>
       </div>
 
       {/* UPI Pay-As-You-Go Promo Banner if low on credits */}
       {credits < 2 && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(38,226,0,0.1), rgba(254,1,127,0.05))',
-          border: '2px solid rgba(38,226,0,0.3)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '24px' }}>⚡️</span>
+        <div className="bg-gradient-to-r from-[#26e200]/10 via-[#26e200]/5 to-[#fe017f]/10 border-2 border-[#26e200]/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl sm:text-3xl shrink-0">⚡️</span>
             <div>
-              <h3 style={{ color: 'white', fontWeight: 800, fontSize: '15px', margin: 0 }}>
+              <h3 className="text-white font-bold text-sm sm:text-base">
                 Pay-As-You-Go: Recharges Start at Just ₹9 via UPI
               </h3>
-              <p style={{ color: '#cbd5e1', fontSize: '13px', margin: '2px 0 0' }}>
+              <p className="text-slate-300 text-xs sm:text-sm mt-0.5 leading-relaxed">
                 Instant activation with Google Pay, PhonePe, Paytm, or CRED. No monthly commitments.
               </p>
             </div>
           </div>
           <button
             onClick={() => setIsUpiModalOpen(true)}
-            style={{
-              background: '#26e200', color: 'black', fontWeight: 800, fontSize: '13px',
-              padding: '8px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer'
-            }}
+            className="w-full sm:w-auto shrink-0 bg-[#26e200] hover:bg-[#20be00] text-black font-black text-xs sm:text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-md text-center"
           >
             Recharge Now →
           </button>
@@ -190,63 +165,54 @@ export function DashboardClient({ stats, isPaused }: {
 
       {/* Feedback message */}
       {message && (
-        <div style={{
-          padding: '12px 16px',
-          borderRadius: '10px',
-          background: messageType === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-          border: `1px solid ${messageType === 'success' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          color: messageType === 'success' ? '#34d399' : '#f87171',
-          fontSize: '14px', fontWeight: 500
-        }}>
+        <div className={`p-3.5 sm:p-4 rounded-xl text-xs sm:text-sm font-medium border ${
+          messageType === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+            : 'bg-red-500/10 border-red-500/30 text-red-300'
+        }`}>
           {message}
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+      {/* Stats Grid - 2 cols on mobile, 3 on tablet, 5 on desktop */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {statCards.map((stat) => (
-          <div key={stat.name} style={{
-            background: '#0f172a', border: '1px solid #1e293b',
-            borderRadius: '12px', padding: '20px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '40px', height: '40px', borderRadius: '10px',
-                background: `${stat.color}20`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <stat.icon size={20} color={stat.color} />
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{stat.name}</p>
-                <p style={{ fontSize: '22px', fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{stat.value}</p>
-              </div>
+          <div 
+            key={stat.name} 
+            className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 sm:p-5 flex items-center gap-3 shadow-sm hover:border-slate-700 transition-colors"
+          >
+            <div 
+              className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: `${stat.color}15` }}
+            >
+              <stat.icon size={18} color={stat.color} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] sm:text-xs text-slate-400 font-medium truncate">{stat.name}</p>
+              <p className="text-base sm:text-xl font-black text-white mt-0.5 truncate">{stat.value}</p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Pipeline Visualization */}
-      <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', padding: '24px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#cbd5e1', margin: '0 0 20px' }}>
+      {/* Pipeline Visualization with smooth horizontal scroll */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-sm">
+        <h2 className="text-sm sm:text-base font-bold text-slate-200 mb-4">
           Autonomous Pipeline Stages
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', overflowX: 'auto', gap: '4px' }}>
+        <div className="flex items-center justify-start overflow-x-auto pb-2 gap-2 sm:gap-3 scrollbar-thin">
           {PIPELINE_STEPS.map((step, idx) => (
-            <div key={step.label} style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '70px' }}>
-                <div style={{
-                  width: '44px', height: '44px', borderRadius: '50%',
-                  background: '#1e293b', border: '2px solid #334155',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '20px'
-                }}>
+            <div key={step.label} className="flex items-center shrink-0">
+              <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px]">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-base sm:text-lg shadow-inner">
                   {step.icon}
                 </div>
-                <span style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', textAlign: 'center' }}>{step.label}</span>
+                <span className="mt-2 text-[10px] sm:text-xs text-slate-400 text-center font-medium">
+                  {step.label}
+                </span>
               </div>
               {idx < PIPELINE_STEPS.length - 1 && (
-                <div style={{ width: '32px', height: '2px', background: '#1e293b', margin: '0 4px', marginBottom: '20px' }} />
+                <div className="w-5 sm:w-8 h-0.5 bg-slate-800 mb-5 shrink-0" />
               )}
             </div>
           ))}

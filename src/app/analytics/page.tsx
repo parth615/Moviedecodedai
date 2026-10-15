@@ -83,7 +83,7 @@ export default async function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl bg-slate-900 border border-slate-800 shadow overflow-hidden mt-8">
+      <div className="rounded-xl bg-slate-900 border border-slate-800 shadow overflow-x-auto mt-8">
         <table className="min-w-full divide-y divide-slate-800">
           <thead className="bg-slate-900/50">
             <tr>

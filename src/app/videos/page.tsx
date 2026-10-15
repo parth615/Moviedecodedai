@@ -41,7 +41,7 @@ export default async function VideosPage() {
         <span className="text-sm text-slate-400">{videos.length} videos total</span>
       </div>
 
-      <div className="rounded-xl bg-slate-900 border border-slate-800 shadow overflow-hidden">
+      <div className="rounded-xl bg-slate-900 border border-slate-800 shadow overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-800">
           <thead className="bg-slate-900/50">
             <tr>

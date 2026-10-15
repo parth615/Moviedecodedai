@@ -127,8 +127,8 @@ export function UpiPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-slate-950 border-2 border-[#26e200] rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(38,226,0,0.3)] brutal-shadow-green my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="relative w-full max-w-xl bg-slate-950 border-2 border-[#26e200] rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-[0_0_50px_rgba(38,226,0,0.3)] brutal-shadow-green my-6">
         
         {/* Close Button */}
         <button
@@ -284,7 +284,7 @@ export function UpiPaymentModal({
                 <label className="text-xs font-black uppercase text-slate-400 tracking-wider block">
                   2. Enter UPI UTR / Ref No (from payment receipt):
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={utrNumber}
@@ -295,7 +295,7 @@ export function UpiPaymentModal({
                   <button
                     onClick={handleConfirmPayment}
                     disabled={isVerifying}
-                    className="bg-[#26e200] text-black text-xs font-black px-5 py-2.5 rounded-xl uppercase tracking-wider hover:bg-[#20be00] disabled:opacity-50 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                    className="w-full sm:w-auto bg-[#26e200] text-black text-xs font-black px-5 py-2.5 rounded-xl uppercase tracking-wider hover:bg-[#20be00] disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
                   >
                     {isVerifying ? "Verifying..." : "Confirm & Add"}
                     <ArrowRight size={14} />
