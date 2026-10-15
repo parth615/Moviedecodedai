@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MovieDecoded AI",
   description: "Automated faceless short-video generation platform",
+  verification: {
+    google: "9o-AZ4mbLABKPwisUXvHYaRhtlTnAoDDvCJOYFayD2o",
+  },
 };
 
 export default function RootLayout({
