@@ -693,7 +693,9 @@ export function LandingPageClient({ session }: LandingPageProps) {
             <div>
               © 2026 MOVIE DECODED AI. ALL RIGHTS RESERVED.
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center justify-center gap-6">
+              <Link href="/privacy" className="hover:text-white transition-colors">PRIVACY POLICY</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">TERMS OF SERVICE</Link>
               <Link href="/dashboard" className="hover:text-white transition-colors">DASHBOARD</Link>
               <Link href="/approval" className="hover:text-white transition-colors">REVIEW HUB</Link>
               <Link href="/providers" className="hover:text-white transition-colors">YOUTUBE SETUP</Link>
