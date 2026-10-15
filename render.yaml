@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: movie-decoded-ai
+    env: docker
+    plan: starter # You can downgrade this to free if you want to test it for $0
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: DATABASE_URL
+        value: "file:/data/database/prod.db"
+      - key: NEXTAUTH_URL
+        value: "https://your-custom-render-url.onrender.com" # Update this once deployed
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false # Add this in Render dashboard
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false # Add this in Render dashboard
+      - key: STRIPE_SECRET_KEY
+        sync: false # Add this in Render dashboard
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false # Add this in Render dashboard

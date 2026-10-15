@@ -1,0 +1,21 @@
+[Script Info]
+Title: Generated Subtitles
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Montserrat,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,2,40,40,200,1
+Style: Highlight,Montserrat,100,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,4,2,40,40,200,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.50,Default,,0,0,0,,{\c&H0014FF39&\fs100\b1}HELLO{\r} WORLD THIS
+Dialogue: 0,0:00:00.50,0:00:01.00,Default,,0,0,0,,HELLO {\c&H0014FF39&\fs100\b1}WORLD{\r} THIS
+Dialogue: 0,0:00:01.00,0:00:01.50,Default,,0,0,0,,HELLO WORLD {\c&H0014FF39&\fs100\b1}THIS{\r}
+Dialogue: 0,0:00:01.50,0:00:02.00,Default,,0,0,0,,{\c&H0014FF39&\fs100\b1}IS{\r} A TEST
+Dialogue: 0,0:00:02.00,0:00:02.50,Default,,0,0,0,,IS {\c&H0014FF39&\fs100\b1}A{\r} TEST
+Dialogue: 0,0:00:02.50,0:00:03.00,Default,,0,0,0,,IS A {\c&H0014FF39&\fs100\b1}TEST{\r}
+

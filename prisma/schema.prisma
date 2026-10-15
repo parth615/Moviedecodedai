@@ -1,0 +1,266 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NEXTAUTH MODELS ──────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  
+  stripeCustomerId String?
+  credits          Int       @default(0)
+
+  accounts      Account[]
+  sessions      Session[]
+  topics        Topic[]
+  credentials   OAuthCredential[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── APP MODELS ───────────────────────────────────────────────────────────────
+
+model Topic {
+  id               String    @id @default(uuid())
+  userId           String?
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  title            String
+  category         String
+  language         String    @default("hinglish")
+  hook             String?
+  description      String?
+  viralityScore    Int?
+  difficultyScore  Int?
+  status           String    @default("PENDING") // PENDING, RESEARCHED, SCRIPTED, REJECTED
+  sourceUrls       String?   // JSON array string
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  research         Research?
+  script           Script?
+}
+
+model Research {
+  id               String   @id @default(uuid())
+  topicId          String   @unique
+  topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  findings         String?  // JSON string
+  confidenceScore  Int?
+  status           String   @default("COMPLETED")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Script {
+  id               String   @id @default(uuid())
+  topicId          String   @unique
+  topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title            String?
+  hook             String?
+  narration        String?
+  scenes           String?  // JSON string
+  cta              String?
+  description      String?
+  hashtags         String?  // JSON array string
+  language         String   @default("hinglish")
+  wordCount        Int?
+  status           String   @default("DRAFT")
+  claims           String?  // JSON array string
+  
+  templateId         String   @default("GameplayFactsTemplate")
+  animationIntensity Float    @default(1.0)
+  gameplayAssetId    String?
+  gameplayAsset      GameplayAsset? @relation(fields: [gameplayAssetId], references: [id])
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  voiceAsset       VoiceAsset?
+  visualAssets     VisualAsset[]
+  video            Video?
+}
+
+model VoiceAsset {
+  id        String   @id @default(uuid())
+  scriptId  String   @unique
+  script    Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  audioUrl  String
+  duration  Int      // in seconds
+  subtitles String?  // JSON array string of {word, start, end}
+  provider  String   @default("ElevenLabs")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GameplayAsset {
+  id          String   @id @default(uuid())
+  title       String
+  url         String
+  duration    Int      // in seconds
+  tags        String?  // comma separated
+  license     String?  // e.g. "Creative Commons", "Purchased"
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scripts     Script[]
+}
+
+model VisualAsset {
+  id         String   @id @default(uuid())
+  scriptId   String
+  script     Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  sceneIndex Int
+  assetUrl   String
+  assetType  String   // image or video
+  prompt     String?
+  provider   String   @default("MockProvider")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([scriptId, sceneIndex])
+}
+
+model Video {
+  id        String   @id @default(uuid())
+  scriptId  String   @unique
+  script    Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  fileUrl   String
+  duration  Int
+  resolution String  @default("1080x1920")
+  status    String   @default("COMPLETED") // COMPLETED, NEEDS_REVIEW, READY_FOR_APPROVAL, APPROVED, REJECTED, PUBLISHED
+  qaScore   Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  approval     Approval?
+  publications Publication[]
+}
+
+model Approval {
+  id         String    @id @default(uuid())
+  videoId    String    @unique
+  video      Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  status     String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewer   String?
+  feedback   String?
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Publication {
+  id          String   @id @default(uuid())
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  platform    String   // YOUTUBE_SHORTS, INSTAGRAM_REELS
+  externalId  String?
+  status      String   @default("SCHEDULED") // SCHEDULED, PUBLISHED, FAILED
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  analytics   Analytics?
+
+  @@unique([videoId, platform])
+}
+
+model Analytics {
+  id             String      @id @default(uuid())
+  publicationId  String      @unique
+  publication    Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  views          Int         @default(0)
+  likes          Int         @default(0)
+  comments       Int         @default(0)
+  retentionRate  Float       @default(0.0)
+  fetchedAt      DateTime
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Job {
+  id          String   @id @default(uuid())
+  name        String
+  status      String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, RETRYING, BLOCKED
+  data        String?  // JSON payload
+  error       String?
+  provider    String?
+  attemptCount Int     @default(0)
+  logs        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model OAuthCredential {
+  id           String   @id @default(uuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String   // 'youtube' or 'instagram'
+  accessToken  String
+  refreshToken String?
+  scopes       String?
+  expiresAt    DateTime?
+  accountInfo  String?  // JSON with username/email for display
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // For multi-tenant, each user can have one youtube and one instagram
+  @@unique([userId, provider])
+}
