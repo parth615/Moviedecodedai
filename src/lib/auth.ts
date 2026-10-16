@@ -16,16 +16,45 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async session({ session, token }) {
-      if (session.user && token.sub) {
-        session.user.id = token.sub;
-        
-        // Fetch fresh credits from DB on every session request to ensure it's always synced
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: { credits: true }
-        });
-        
-        session.user.credits = dbUser?.credits || 0;
+      if (session.user) {
+        let dbUser = null;
+        if (token.sub) {
+          try {
+            dbUser = await prisma.user.findUnique({ where: { id: token.sub } });
+          } catch (_) {}
+        }
+        if (!dbUser && session.user.email) {
+          try {
+            dbUser = await prisma.user.findUnique({ where: { email: session.user.email } });
+          } catch (_) {}
+        }
+        if (!dbUser && (token.sub || session.user.email)) {
+          try {
+            dbUser = await prisma.user.create({
+              data: {
+                id: token.sub || undefined,
+                email: session.user.email || undefined,
+                name: session.user.name || null,
+                image: session.user.image || null,
+                credits: 0,
+              },
+            });
+          } catch (_) {
+            if (session.user.email) {
+              try {
+                dbUser = await prisma.user.findUnique({ where: { email: session.user.email } });
+              } catch (_) {}
+            }
+          }
+        }
+
+        if (dbUser) {
+          session.user.id = dbUser.id;
+          (session.user as any).credits = dbUser.credits;
+        } else if (token.sub) {
+          session.user.id = token.sub;
+          (session.user as any).credits = 0;
+        }
       }
       return session;
     },

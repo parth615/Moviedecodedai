@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getOrCreateUser } from '@/lib/user';
 
 export async function POST() {
   try {
@@ -13,7 +14,7 @@ export async function POST() {
       return NextResponse.json({ success: false, error: "Unauthorized. Please log in." }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    const user = await getOrCreateUser(session.user);
     if (!user || user.credits < 1) {
       return NextResponse.json({ success: false, error: "Insufficient credits. Please buy more." }, { status: 402 });
     }

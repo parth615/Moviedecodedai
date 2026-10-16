@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getPromoToken } from '@/lib/tokens';
+import { getOrCreateUser } from '@/lib/user';
 
 export async function POST(req: Request) {
   try {
@@ -34,10 +35,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const user = await getOrCreateUser(session.user);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User record could not be resolved. Please re-login.' },
+        { status: 400 }
+      );
+    }
+
     // Check if the user already redeemed this token
     const alreadyRedeemed = await prisma.payment.findFirst({
       where: {
-        userId: session.user.id,
+        userId: user.id,
         packageId: normalizedToken,
         method: 'PROMO_CODE',
       },
@@ -52,7 +61,7 @@ export async function POST(req: Request) {
 
     // Atomically increment user credits
     const updatedUser = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: user.id },
       data: {
         credits: { increment: promo.credits },
       },
@@ -61,7 +70,7 @@ export async function POST(req: Request) {
     // Record the redemption
     await prisma.payment.create({
       data: {
-        userId: session.user.id,
+        userId: user.id,
         amount: 0,
         currency: 'INR',
         credits: promo.credits,

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { UPI_PACKAGES } from "@/lib/upi";
+import { getOrCreateUser } from "@/lib/user";
 
 export async function POST(req: Request) {
   try {
@@ -16,10 +17,15 @@ export async function POST(req: Request) {
 
     const selectedPkg = UPI_PACKAGES.find((p) => p.id === packageId) || UPI_PACKAGES[0];
 
+    const user = await getOrCreateUser(session.user);
+    if (!user) {
+      return NextResponse.json({ error: "User account could not be found." }, { status: 400 });
+    }
+
     // Atomically increment user credits and record Payment
     const [updatedUser, payment] = await prisma.$transaction([
       prisma.user.update({
-        where: { id: session.user.id },
+        where: { id: user.id },
         data: {
           credits: { increment: selectedPkg.credits },
         },
@@ -30,7 +36,7 @@ export async function POST(req: Request) {
       }),
       prisma.payment.create({
         data: {
-          userId: session.user.id,
+          userId: user.id,
           amount: selectedPkg.priceInr,
           currency: "INR",
           credits: selectedPkg.credits,
