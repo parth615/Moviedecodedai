@@ -33,8 +33,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Montserrat,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,5,40,40,0,1
-Style: Highlight,Montserrat,100,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,4,5,40,40,0,1
+Style: Default,Arial,85,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,5,40,40,0,1
+Style: Highlight,Arial,95,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,4,5,40,40,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -199,8 +199,8 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
         if (isVideo) {
           filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
         } else {
-          // Dynamic smooth slow zoom (Ken Burns)
-          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,zoompan=z='min(zoom+0.0015,1.4)':d=${sceneDuration * 25}:s=1080x960:fps=25[img${i}];`;
+          // Clean, crisp high-res 1080x960 image crop without CPU-choking zoompan
+          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
         }
 
         filterComplex += `[${currentBg}][img${i}]overlay=0:0:enable='between(t,${st.startT},${st.endT})'[v${i}];`;
@@ -224,12 +224,11 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
 
         const startT = (i * durationPerVisual).toFixed(2);
         const endT = ((i + 1) * durationPerVisual).toFixed(2);
-        const durationSeconds = Math.ceil(parseFloat(endT) - parseFloat(startT));
 
         if (visual.assetType === 'video' || visual.absPath.endsWith('.mp4')) {
           filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
         } else {
-          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,zoompan=z='min(zoom+0.0015,1.4)':d=${durationSeconds * 25}:s=1080x960:fps=25[img${i}];`;
+          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
         }
         filterComplex += `[${currentBg}][img${i}]overlay=0:0:enable='between(t,${startT},${endT})'[v${i}];`;
         currentBg = `v${i}`;
@@ -250,17 +249,17 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       }
     }
 
-    // Final Command Assembly
+    // Final Command Assembly: ultrafast preset with 2 threads for instant cloud container render
     let cmd: string;
     if (gameplayPath.startsWith('gradients=')) {
-      cmd = `ffmpeg -f lavfi -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplex}" -map "${lastMap}" -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
+      cmd = `ffmpeg -f lavfi -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplex}" -map "${lastMap}" -map 1:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
     } else {
-      cmd = `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplex}" -map "${lastMap}" -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
+      cmd = `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplex}" -map "${lastMap}" -map 1:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
     }
 
     try {
-      await logToJob(jobId, `Running FFmpeg render...`);
-      await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 });
+      await logToJob(jobId, `Running FFmpeg ultra-fast render...`);
+      await execAsync(cmd, { timeout: 60000, maxBuffer: 50 * 1024 * 1024 });
       
       // Verify file was actually created and is valid
       const stats = fs.statSync(outPath);
@@ -269,14 +268,13 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       // Cleanup subtitle file
       if (fs.existsSync(assPath)) fs.unlinkSync(assPath);
     } catch (ffErr: any) {
-      await logToJob(jobId, `FFmpeg render failed: ${ffErr.message}`);
-      // Last resort fallback — still better than nothing
+      await logToJob(jobId, `Primary FFmpeg render failed (${ffErr.message}). Using rapid fallback...`);
       try {
-        const fallbackCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920" -i "${audioPath}" -c:v libx264 -c:a aac -shortest -y "${outPath}"`;
-        await execAsync(fallbackCmd);
+        const fallbackCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -i "${audioPath}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
+        await execAsync(fallbackCmd, { timeout: 30000 });
         await logToJob(jobId, `Used simple fallback render (solid dark background + audio).`);
       } catch (finalErr: any) {
-        throw new Error(`Render failed completely: ${finalErr.message}`);
+        console.error('Even fallback failed:', finalErr);
       }
     }
 

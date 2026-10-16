@@ -166,6 +166,23 @@ export function DashboardClient({ stats, isPaused }: {
     }
   };
 
+  const handleResetPipeline = async () => {
+    try {
+      await fetch('/api/pipeline/reset', { method: 'POST' });
+      setIsGenerating(false);
+      setPipelineStatus((prev) => ({
+        ...prev,
+        isProcessing: false,
+        activeStageIndex: -1,
+        activeStageLabel: 'Pipeline Idle',
+        detailedMessage: 'Pipeline state reset. Click GENERATE VIRAL IDEAS to begin.',
+      }));
+      setMessage('✓ Pipeline state cleared. Ready to start fresh.');
+      setMessageType('success');
+      setTimeout(() => setMessage(''), 4000);
+    } catch (_) {}
+  };
+
   const handleGenerateClick = () => {
     if (credits < 1) {
       setIsUpiModalOpen(true);
@@ -308,10 +325,19 @@ export function DashboardClient({ stats, isPaused }: {
                 Autonomous Pipeline Stages
               </h2>
               {pipelineStatus.isProcessing ? (
-                <span className="inline-flex items-center gap-1.5 bg-[#2fcaee]/15 text-[#2fcaee] text-[11px] font-black px-2.5 py-0.5 rounded-full border border-[#2fcaee]/40 animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-[#2fcaee] animate-ping" />
-                  Live Processing
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 bg-[#2fcaee]/15 text-[#2fcaee] text-[11px] font-black px-2.5 py-0.5 rounded-full border border-[#2fcaee]/40 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-[#2fcaee] animate-ping" />
+                    Live Processing
+                  </span>
+                  <button
+                    onClick={handleResetPipeline}
+                    className="text-[11px] text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-500/50 rounded-lg px-2 py-0.5 transition-colors cursor-pointer"
+                    title="Click if generation seems stuck to reset and try again"
+                  >
+                    Reset
+                  </button>
+                </div>
               ) : pipelineStatus.activeStageIndex === 7 ? (
                 <span className="inline-flex items-center gap-1.5 bg-[#26e200]/15 text-[#26e200] text-[11px] font-black px-2.5 py-0.5 rounded-full border border-[#26e200]/40">
                   <Check size={12} />

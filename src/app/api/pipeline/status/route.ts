@@ -76,7 +76,19 @@ export async function GET() {
     let videoUrl = '';
     let videoId = '';
 
-    // Check if user has an active GENERATE_TOPICS job
+    // Auto-rescue any zombie PROCESSING job older than 3 minutes
+    try {
+      await prisma.job.updateMany({
+        where: {
+          status: 'PROCESSING',
+          updatedAt: { lt: new Date(Date.now() - 3 * 60 * 1000) }
+        },
+        data: { status: 'PENDING' }
+      });
+    } catch (_) {}
+
+    // Check if user has an active GENERATE_TOPICS job or any active job in queue
+    const hasActiveJob = activeJobs.length > 0;
     const isGeneratingTopic = activeJobs.some(j => j.name === 'GENERATE_TOPICS');
 
     if (latestTopic) {
@@ -118,7 +130,7 @@ export async function GET() {
         }
       }
 
-      // Determine the CURRENT ACTIVE STAGE based on latest entity
+      // Determine the CURRENT ACTIVE STAGE based on latest entity & job presence
       if (video) {
         if (video.status === 'READY_FOR_APPROVAL') {
           activeStageIndex = 7;
@@ -139,39 +151,53 @@ export async function GET() {
           activeStageIndex = 6;
           activeStageLabel = 'Quality Assurance & Scoring';
           detailedMessage = 'Verifying audio sync, pacing, and visual safety...';
+          isProcessing = hasActiveJob;
+        }
+      } else if (hasActiveJob) {
+        // Only show live processing if a job is ACTUALLY running or queued
+        if (latestTopic.script?.visualAssets && latestTopic.script.visualAssets.length > 0) {
+          activeStageIndex = 5;
+          activeStageLabel = 'Rendering 1080p Video';
+          detailedMessage = 'FFmpeg GPU engine is assembling split-screen video...';
+          isProcessing = true;
+        } else if (latestTopic.script?.voiceAsset) {
+          activeStageIndex = 4;
+          activeStageLabel = 'Creating Visuals & Subtitles';
+          detailedMessage = 'Generating cinematic scenes & kinetic ASS subtitles...';
+          isProcessing = true;
+        } else if (latestTopic.script) {
+          activeStageIndex = 3;
+          activeStageLabel = 'Generating Neural Voiceover';
+          detailedMessage = 'Synthesizing studio-grade audio with ElevenLabs...';
+          isProcessing = true;
+        } else if (latestTopic.research) {
+          activeStageIndex = 2;
+          activeStageLabel = 'Writing Viral Script';
+          detailedMessage = 'Crafting punchy 3-second hook & scene breakdown...';
+          isProcessing = true;
+        } else {
+          activeStageIndex = 1;
+          activeStageLabel = 'Researching Topic Facts';
+          detailedMessage = 'Extracting verified facts and narrative twists...';
           isProcessing = true;
         }
-      } else if (latestTopic.script?.visualAssets && latestTopic.script.visualAssets.length > 0) {
-        activeStageIndex = 5;
-        activeStageLabel = 'Rendering 1080p Video';
-        detailedMessage = 'FFmpeg GPU engine is assembling split-screen video...';
-        isProcessing = true;
-      } else if (latestTopic.script?.voiceAsset) {
-        activeStageIndex = 4;
-        activeStageLabel = 'Creating Visuals & Subtitles';
-        detailedMessage = 'Generating cinematic scenes & kinetic ASS subtitles...';
-        isProcessing = true;
-      } else if (latestTopic.script) {
-        activeStageIndex = 3;
-        activeStageLabel = 'Generating Neural Voiceover';
-        detailedMessage = 'Synthesizing studio-grade audio with ElevenLabs...';
-        isProcessing = true;
-      } else if (latestTopic.research) {
-        activeStageIndex = 2;
-        activeStageLabel = 'Writing Viral Script';
-        detailedMessage = 'Crafting punchy 3-second hook & scene breakdown...';
-        isProcessing = true;
       } else {
-        activeStageIndex = 1;
-        activeStageLabel = 'Researching Topic Facts';
-        detailedMessage = 'Extracting verified facts and narrative twists...';
-        isProcessing = true;
+        // No active jobs in queue! Unblock user immediately!
+        isProcessing = false;
+        activeStageIndex = -1;
+        activeStageLabel = 'Pipeline Idle';
+        detailedMessage = 'Ready to generate a new video. Click GENERATE VIRAL IDEAS above.';
       }
-    } else if (isGeneratingTopic) {
+    } else if (isGeneratingTopic && hasActiveJob) {
       activeStageIndex = 0;
       activeStageLabel = 'Generating Viral Ideas';
       detailedMessage = 'Gemini AI is researching viral hooks & trending angles...';
       isProcessing = true;
+    } else {
+      isProcessing = false;
+      activeStageIndex = -1;
+      activeStageLabel = 'Pipeline Idle';
+      detailedMessage = 'Ready to generate a new video. Click GENERATE VIRAL IDEAS above.';
     }
 
     // Deduplicate completed stages and sort
