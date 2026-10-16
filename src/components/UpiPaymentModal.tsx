@@ -39,6 +39,10 @@ export function UpiPaymentModal({
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedSuccess, setVerifiedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [isRedeemingToken, setIsRedeemingToken] = useState(false);
+  const [tokenError, setTokenError] = useState("");
 
   // Fetch / update order whenever selected package changes or modal opens
   useEffect(() => {
@@ -123,6 +127,38 @@ export function UpiPaymentModal({
       setErrorMessage(e.message || "Network error. Please try again.");
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleRedeemToken = async () => {
+    if (!tokenInput.trim()) {
+      setTokenError("Please enter a valid VIP token code.");
+      return;
+    }
+    setIsRedeemingToken(true);
+    setTokenError("");
+    try {
+      const res = await fetch("/api/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setVerifiedSuccess(true);
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess(data.newCredits);
+            onClose();
+          }, 1400);
+        }
+      } else {
+        setTokenError(data.error || "Failed to redeem token.");
+      }
+    } catch (e: any) {
+      setTokenError(e.message || "Network error.");
+    } finally {
+      setIsRedeemingToken(false);
     }
   };
 
@@ -310,6 +346,52 @@ export function UpiPaymentModal({
                   <ShieldCheck size={13} className="text-[#26e200]" />
                   Instant credit activation. 100% money-back guarantee if render fails.
                 </p>
+
+                {/* VIP Friend Token Toggle */}
+                <div className="pt-3 border-t border-slate-800/80">
+                  {!showTokenInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenInput(true)}
+                      className="text-xs text-[#fe017f] hover:text-[#ff3898] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <span>🎁 Have a VIP Friend Pass or Token? Redeem it free →</span>
+                    </button>
+                  ) : (
+                    <div className="space-y-2 bg-slate-900/90 border border-[#fe017f]/40 p-3 rounded-xl">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-white uppercase text-[11px]">Enter VIP Token Code</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowTokenInput(false)}
+                          className="text-slate-400 hover:text-white text-[10px]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="text"
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
+                          placeholder="e.g. PARTH-VIP-100"
+                          className="flex-1 bg-black border border-slate-700 focus:border-[#fe017f] rounded-xl px-3 py-2 text-xs text-white uppercase font-mono outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleRedeemToken}
+                          disabled={isRedeemingToken || !tokenInput.trim()}
+                          className="bg-[#fe017f] hover:bg-[#d6006b] text-white text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider disabled:opacity-50 transition-colors cursor-pointer"
+                        >
+                          {isRedeemingToken ? "Redeeming..." : "Claim Free"}
+                        </button>
+                      </div>
+                      {tokenError && (
+                        <p className="text-[11px] text-red-400 font-bold">{tokenError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
             </div>

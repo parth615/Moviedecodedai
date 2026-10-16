@@ -9,9 +9,12 @@ import {
   PauseCircle, 
   Zap, 
   Coins, 
-  Sparkles
+  Sparkles,
+  Gift
 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { UpiPaymentModal } from '@/components/UpiPaymentModal';
+import { RedeemTokenModal } from '@/components/RedeemTokenModal';
 
 const PIPELINE_STEPS = [
   { label: 'Ideas', icon: '💡' },
@@ -34,11 +37,23 @@ export function DashboardClient({ stats, isPaused }: {
   };
   isPaused: boolean;
 }) {
+  const searchParams = useSearchParams();
   const [isGenerating, setIsGenerating] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
   const [credits, setCredits] = useState<number>(0);
   const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
+  const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
+  const [initialRedeemToken, setInitialRedeemToken] = useState('');
+
+  // Check URL query param for ?token= or ?redeem=
+  useEffect(() => {
+    const queryToken = searchParams?.get('token') || searchParams?.get('redeem');
+    if (queryToken) {
+      setInitialRedeemToken(queryToken);
+      setIsRedeemModalOpen(true);
+    }
+  }, [searchParams]);
 
   // Fetch live credits
   useEffect(() => {
@@ -108,7 +123,20 @@ export function DashboardClient({ stats, isPaused }: {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          {/* Redeem VIP Pass Button */}
+          <button
+            onClick={() => {
+              setInitialRedeemToken('');
+              setIsRedeemModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 bg-[#fe017f]/10 hover:bg-[#fe017f]/20 border border-[#fe017f]/30 rounded-xl px-3.5 py-2.5 text-[#fe017f] text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm w-full sm:w-auto"
+            title="Redeem family/friends VIP pass"
+          >
+            <Gift size={16} />
+            <span>Redeem VIP Token</span>
+          </button>
+
           {/* Top Up Button */}
           <button
             onClick={() => setIsUpiModalOpen(true)}
@@ -228,6 +256,18 @@ export function DashboardClient({ stats, isPaused }: {
           setCredits(newCredits);
           // Automatically trigger generation now that credits are loaded!
           executeGenerate();
+        }}
+      />
+
+      {/* Redeem VIP Token Modal */}
+      <RedeemTokenModal
+        isOpen={isRedeemModalOpen}
+        initialToken={initialRedeemToken}
+        onClose={() => setIsRedeemModalOpen(false)}
+        onSuccess={(newCredits) => {
+          setCredits(newCredits);
+          setMessage(`✓ VIP Pass activated! Balance updated to ${newCredits} video credits.`);
+          setMessageType('success');
         }}
       />
 
