@@ -35,10 +35,10 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       {/* Sidebar Header */}
       <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b border-slate-800/60">
         <div>
-          <h1 className="text-lg font-bold text-white tracking-wide">
-            <span className="text-blue-500">Movie</span>Decoded<span className="text-xs font-mono ml-1 text-slate-400">AI</span>
+          <h1 className="text-base font-bold text-white tracking-wide">
+            <span className="text-blue-500">AIVideo</span>Generator
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">Universal Content Engine</p>
+          <p className="text-xs text-slate-500 mt-0.5">by MovieDecoded AI</p>
         </div>
 
         {/* Close Button on Mobile */}

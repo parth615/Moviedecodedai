@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MovieDecoded AI",
-  description: "Automated faceless short-video generation platform",
+  title: "AIVideoGenerator - AI Video Creator & YouTube Shorts Engine",
+  description: "AIVideoGenerator is an automated AI platform for generating split-screen commentary, educational recaps, and publishing shorts directly to YouTube.",
   verification: {
     google: "9o-AZ4mbLABKPwisUXvHYaRhtlTnAoDDvCJOYFayD2o",
   },

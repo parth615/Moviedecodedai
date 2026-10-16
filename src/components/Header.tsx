@@ -54,7 +54,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
           {/* Mobile Brand Name */}
           <div className="md:hidden flex items-center">
             <span className="font-black text-sm text-white tracking-wide">
-              <span className="text-blue-500">Movie</span>Decoded
+              <span className="text-blue-500">AIVideo</span>Generator
             </span>
           </div>
         </div>

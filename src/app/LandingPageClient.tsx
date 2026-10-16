@@ -174,16 +174,19 @@ export function LandingPageClient({ session }: LandingPageProps) {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/" className="group flex items-center gap-2">
-              <span className="text-2xl font-black tracking-tighter text-white group-hover:text-[#fe017f] transition-colors">
-                MOVIE<span className="text-[#fe017f]">DECODED</span>
+              <span className="text-xl sm:text-2xl font-black tracking-tighter text-white group-hover:text-[#fe017f] transition-colors">
+                AI<span className="text-[#fe017f]">VIDEO</span>GENERATOR
               </span>
-              <span className="bg-[#ffff00] text-black text-[10px] font-black px-2 py-0.5 uppercase tracking-widest rounded-sm border border-black rotate-3">
-                AI
+              <span className="bg-[#ffff00] text-black text-[9px] sm:text-[10px] font-black px-2 py-0.5 uppercase tracking-widest rounded-sm border border-black rotate-2 whitespace-nowrap">
+                by MovieDecoded
               </span>
             </Link>
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-xs font-black tracking-wider uppercase">
+            <a href="#about" className="text-[#2fcaee] hover:text-white transition-colors">
+              App Purpose & Safety
+            </a>
             <a href="#demo" className="text-slate-300 hover:text-[#fe017f] transition-colors">
               Live Simulator
             </a>
@@ -600,6 +603,82 @@ export function LandingPageClient({ session }: LandingPageProps) {
         </div>
       </section>
 
+      {/* ── APPLICATION PURPOSE & GOOGLE API COMPLIANCE DISCLOSURE ───────────── */}
+      <section id="about" className="relative z-10 py-20 px-6 bg-slate-900/60 border-t-2 border-b-2 border-slate-800">
+        <div className="max-w-4xl mx-auto space-y-10 scroll-reveal">
+          
+          <div className="text-center">
+            <span className="text-xs font-black text-[#2fcaee] tracking-widest uppercase border-b-2 border-[#2fcaee] pb-1">
+              TRANSPARENCY & COMPLIANCE DISCLOSURE
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight uppercase mt-3">
+              About AIVideoGenerator
+            </h2>
+            <p className="text-sm text-slate-400 mt-2 max-w-2xl mx-auto">
+              Operated by MovieDecoded AI • Publicly accessible cloud-based multimedia creation platform
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            
+            {/* Box 1: App Purpose */}
+            <div className="bg-black/80 border-2 border-slate-800 rounded-2xl p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🎯</span>
+                <h3 className="text-base font-black text-white uppercase">Application Purpose</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                <strong>AIVideoGenerator</strong> is an automated multimedia creation tool designed for digital creators, educators, and video publishers. It automates the scripting, synthetic narration, and split-screen video compilation for short-form video content (such as movie analysis, pop culture commentary, and educational shorts).
+              </p>
+            </div>
+
+            {/* Box 2: Google & YouTube API Usage */}
+            <div className="bg-black/80 border-2 border-slate-800 rounded-2xl p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📺</span>
+                <h3 className="text-base font-black text-[#ffff00] uppercase">Google & YouTube API Usage</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                AIVideoGenerator uses Google OAuth 2.0 and the YouTube Data API v3 (<code className="text-xs text-[#2fcaee]">youtube.upload</code>) solely to allow authenticated channel owners to upload their approved video shorts directly to their own YouTube channel. No personal Google data is sold or shared.
+              </p>
+            </div>
+
+            {/* Box 3: Human Review & Zero Unapproved Uploads */}
+            <div className="bg-black/80 border-2 border-slate-800 rounded-2xl p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🛡️</span>
+                <h3 className="text-base font-black text-[#26e200] uppercase">Human Approval & Data Safety</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                All generated videos remain strictly in a private user staging area until the user explicitly previews, edits, and approves them. AIVideoGenerator strictly adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-[#2fcaee] underline">Google API Services User Data Policy</a>, including the Limited Use requirements.
+              </p>
+            </div>
+
+            {/* Box 4: Strict AI NCII Prohibition */}
+            <div className="bg-black/80 border-2 border-red-500/40 rounded-2xl p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🚫</span>
+                <h3 className="text-base font-black text-red-400 uppercase">Strict AI NCII Prohibition</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                In strict compliance with Google Developer Policies, AIVideoGenerator <strong>strictly prohibits the generation, rendering, or uploading of AI-generated Non-Consensual Intimate Imagery (AI NCII)</strong>, sexually explicit media, harassment, hate speech, or defamatory content. Violations result in immediate permanent termination.
+              </p>
+            </div>
+
+          </div>
+
+          <div className="text-center pt-2">
+            <p className="text-xs text-slate-400">
+              For complete legal terms and data handling procedures, read our{' '}
+              <Link href="/privacy" className="text-[#fe017f] underline font-bold">Privacy Policy</Link>{' '}
+              and{' '}
+              <Link href="/terms" className="text-[#fe017f] underline font-bold">Terms of Service</Link>.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
       {/* ── FAQ ACCORDION ────────────────────────────────────────────────────── */}
       <section id="faq" className="relative z-10 py-20 px-6 bg-slate-950/40 border-t border-slate-900">
         <div className="max-w-3xl mx-auto">
@@ -691,7 +770,7 @@ export function LandingPageClient({ session }: LandingPageProps) {
 
           <div className="border-t border-slate-900 pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 font-mono gap-4">
             <div>
-              © 2026 MOVIE DECODED AI. ALL RIGHTS RESERVED.
+              © 2026 AIVideoGenerator (MovieDecoded AI). ALL RIGHTS RESERVED.
             </div>
             <div className="flex flex-wrap items-center justify-center gap-6">
               <Link href="/privacy" className="hover:text-white transition-colors">PRIVACY POLICY</Link>
