@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { 
   Play, 
   Clock, 
@@ -10,22 +11,24 @@ import {
   Zap, 
   Coins, 
   Sparkles,
-  Gift
+  Gift,
+  Check,
+  Radio
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { UpiPaymentModal } from '@/components/UpiPaymentModal';
 import { RedeemTokenModal } from '@/components/RedeemTokenModal';
 
 const PIPELINE_STEPS = [
-  { label: 'Ideas', icon: '💡' },
-  { label: 'Research', icon: '🔍' },
-  { label: 'Scripts', icon: '📝' },
-  { label: 'Voice', icon: '🎙️' },
-  { label: 'Visuals', icon: '🎬' },
-  { label: 'Render', icon: '🖥️' },
-  { label: 'QA', icon: '✅' },
-  { label: 'Approval', icon: '👤' },
-  { label: 'Published', icon: '🚀' }
+  { label: 'Ideas', icon: '💡', desc: 'Viral Topic AI' },
+  { label: 'Research', icon: '🔍', desc: 'Fact Mining' },
+  { label: 'Scripts', icon: '📝', desc: 'Hook & Script' },
+  { label: 'Voice', icon: '🎙️', desc: 'ElevenLabs Audio' },
+  { label: 'Visuals', icon: '🎬', desc: 'Scene Imagery' },
+  { label: 'Render', icon: '🖥️', desc: 'FFmpeg 1080p' },
+  { label: 'QA', icon: '✅', desc: 'Quality Check' },
+  { label: 'Approval', icon: '👤', desc: 'Creator Review' },
+  { label: 'Published', icon: '🚀', desc: 'YouTube Live' },
 ];
 
 export function DashboardClient({ stats, isPaused }: {
@@ -46,6 +49,29 @@ export function DashboardClient({ stats, isPaused }: {
   const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
   const [initialRedeemToken, setInitialRedeemToken] = useState('');
 
+  // Live Pipeline Progress State
+  const [pipelineStatus, setPipelineStatus] = useState<{
+    activeStageIndex: number;
+    activeStageLabel: string;
+    completedStages: number[];
+    isProcessing: boolean;
+    detailedMessage: string;
+    progressPercent: number;
+    topicTitle: string;
+    videoId: string;
+    videoUrl: string;
+  }>({
+    activeStageIndex: -1,
+    activeStageLabel: 'Pipeline Idle',
+    completedStages: [],
+    isProcessing: false,
+    detailedMessage: '',
+    progressPercent: 0,
+    topicTitle: '',
+    videoId: '',
+    videoUrl: '',
+  });
+
   // Check URL query param for ?token= or ?redeem=
   useEffect(() => {
     const queryToken = searchParams?.get('token') || searchParams?.get('redeem');
@@ -56,7 +82,7 @@ export function DashboardClient({ stats, isPaused }: {
   }, [searchParams]);
 
   // Fetch live credits
-  useEffect(() => {
+  const fetchCredits = () => {
     fetch('/api/user/credits')
       .then((res) => res.json())
       .then((data) => {
@@ -65,30 +91,74 @@ export function DashboardClient({ stats, isPaused }: {
         }
       })
       .catch(() => {});
+  };
+
+  // Fetch live pipeline status
+  const fetchPipelineStatus = async () => {
+    try {
+      const res = await fetch('/api/pipeline/status');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setPipelineStatus(data);
+          if (data.isProcessing) {
+            setIsGenerating(true);
+          } else {
+            setIsGenerating(false);
+          }
+        }
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    fetchCredits();
+    fetchPipelineStatus();
+    // Poll every 3.5 seconds to track real-time job progress across stages
+    const interval = setInterval(fetchPipelineStatus, 3500);
+    return () => clearInterval(interval);
   }, []);
 
   const executeGenerate = async () => {
     setIsGenerating(true);
     setMessage('');
+
+    // Instantly light up stage 0 ("Ideas") so the user sees immediate visual feedback
+    setPipelineStatus((prev) => ({
+      ...prev,
+      activeStageIndex: 0,
+      activeStageLabel: 'Generating Viral Ideas',
+      detailedMessage: 'Gemini AI is researching viral hooks & trending angles...',
+      isProcessing: true,
+      progressPercent: 12,
+    }));
+
     try {
       const res = await fetch('/api/pipeline/generate', { method: 'POST' });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage('✓ Pipeline started! Topics and video are being generated in the background.');
+        setMessage('✓ Pipeline initiated! Watch the stages glow as each asset is created.');
         setMessageType('success');
         setCredits((prev) => Math.max(0, prev - 1));
+        // Immediately fetch updated status
+        setTimeout(fetchPipelineStatus, 1000);
       } else if (res.status === 402 || data.error?.includes('credit')) {
         setIsUpiModalOpen(true);
+        setIsGenerating(false);
+        setPipelineStatus((prev) => ({ ...prev, activeStageIndex: -1, isProcessing: false }));
       } else {
         setMessage(`✗ ${data.error || 'Failed to start pipeline.'}`);
         setMessageType('error');
+        setIsGenerating(false);
+        setPipelineStatus((prev) => ({ ...prev, activeStageIndex: -1, isProcessing: false }));
       }
     } catch (e: any) {
       setMessage(`✗ ${e.message}`);
       setMessageType('error');
-    } finally {
       setIsGenerating(false);
-      setTimeout(() => setMessage(''), 6000);
+      setPipelineStatus((prev) => ({ ...prev, activeStageIndex: -1, isProcessing: false }));
+    } finally {
+      setTimeout(() => setMessage(''), 7000);
     }
   };
 
@@ -162,7 +232,7 @@ export function DashboardClient({ stats, isPaused }: {
                 : 'bg-gradient-to-r from-[#26e200] to-[#16a34a] hover:from-[#20be00] hover:to-[#15803d] text-black shadow-[0_4px_20px_rgba(38,226,0,0.3)] active:scale-[0.98]'
             }`}
           >
-            <Zap size={16} className="fill-black" />
+            <Zap size={16} className={isGenerating ? "animate-spin" : "fill-black"} />
             <span>{isGenerating ? 'Generating...' : 'GENERATE VIRAL IDEAS'}</span>
           </button>
         </div>
@@ -223,28 +293,153 @@ export function DashboardClient({ stats, isPaused }: {
         ))}
       </div>
 
-      {/* Pipeline Visualization with smooth horizontal scroll */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-sm">
-        <h2 className="text-sm sm:text-base font-bold text-slate-200 mb-4">
-          Autonomous Pipeline Stages
-        </h2>
-        <div className="flex items-center justify-start overflow-x-auto pb-2 gap-2 sm:gap-3 scrollbar-thin">
-          {PIPELINE_STEPS.map((step, idx) => (
-            <div key={step.label} className="flex items-center shrink-0">
-              <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px]">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-base sm:text-lg shadow-inner">
-                  {step.icon}
-                </div>
-                <span className="mt-2 text-[10px] sm:text-xs text-slate-400 text-center font-medium">
-                  {step.label}
+      {/* ── AUTONOMOUS PIPELINE STAGES WITH REAL-TIME GLOW ─────────────────── */}
+      <div className="bg-slate-900/90 border-2 border-slate-800 rounded-2xl p-5 sm:p-7 shadow-lg space-y-6">
+        
+        {/* Header & Live Progress Status */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                Autonomous Pipeline Stages
+              </h2>
+              {pipelineStatus.isProcessing ? (
+                <span className="inline-flex items-center gap-1.5 bg-[#2fcaee]/15 text-[#2fcaee] text-[11px] font-black px-2.5 py-0.5 rounded-full border border-[#2fcaee]/40 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-[#2fcaee] animate-ping" />
+                  Live Processing
                 </span>
-              </div>
-              {idx < PIPELINE_STEPS.length - 1 && (
-                <div className="w-5 sm:w-8 h-0.5 bg-slate-800 mb-5 shrink-0" />
-              )}
+              ) : pipelineStatus.activeStageIndex === 7 ? (
+                <span className="inline-flex items-center gap-1.5 bg-[#26e200]/15 text-[#26e200] text-[11px] font-black px-2.5 py-0.5 rounded-full border border-[#26e200]/40">
+                  <Check size={12} />
+                  Ready For Approval
+                </span>
+              ) : null}
             </div>
-          ))}
+            
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
+              {pipelineStatus.detailedMessage || 'Visual progress tracker — icons glow live as each stage completes.'}
+            </p>
+          </div>
+
+          {/* Direct CTA when video is ready for approval */}
+          {pipelineStatus.activeStageIndex === 7 && (
+            <Link
+              href="/approval"
+              className="bg-[#26e200] hover:bg-[#20be00] text-black text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(38,226,0,0.5)] active:scale-95 transition-all shrink-0 w-fit"
+            >
+              <span>Review & Approve Video</span>
+              <ArrowRight size={14} />
+            </Link>
+          )}
+
+          {/* Direct CTA when video is published */}
+          {pipelineStatus.completedStages.includes(8) && (
+            <Link
+              href="/published"
+              className="bg-purple-500 hover:bg-purple-600 text-white text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(168,85,247,0.4)] shrink-0 w-fit"
+            >
+              <span>View In Published Hub →</span>
+            </Link>
+          )}
         </div>
+
+        {/* Live Animated Glowing Progress Bar */}
+        <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800 p-0.5 shadow-inner">
+          <div
+            className="h-full bg-gradient-to-r from-[#26e200] via-[#2fcaee] to-[#fe017f] rounded-full transition-all duration-700 ease-out shadow-[0_0_15px_rgba(47,202,238,0.9)]"
+            style={{ width: `${pipelineStatus.progressPercent || (pipelineStatus.isProcessing ? 12 : 0)}%` }}
+          />
+        </div>
+
+        {/* Horizontal Stages Chain */}
+        <div className="flex items-center justify-start overflow-x-auto pb-4 pt-2 gap-2 sm:gap-3 scrollbar-thin">
+          {PIPELINE_STEPS.map((step, idx) => {
+            const isCompleted = pipelineStatus.completedStages.includes(idx);
+            const isActive = pipelineStatus.activeStageIndex === idx;
+            const isUpcoming = !isCompleted && !isActive;
+
+            return (
+              <div key={step.label} className="flex items-center shrink-0">
+                <div className="flex flex-col items-center min-w-[70px] sm:min-w-[85px]">
+                  
+                  {/* Stage Icon Circle with Real-Time Glowing Halo */}
+                  <div className="relative flex items-center justify-center">
+                    
+                    {/* Glowing Neon Halo for Active Stage */}
+                    {isActive && (
+                      <div className="absolute -inset-2 rounded-full bg-[#2fcaee] opacity-75 blur-md animate-pulse" />
+                    )}
+
+                    {/* Glowing Halo for Completed Stage */}
+                    {isCompleted && (
+                      <div className="absolute -inset-1 rounded-full bg-[#26e200] opacity-30 blur-sm" />
+                    )}
+
+                    {/* The Icon Disc */}
+                    <div
+                      className={`relative flex items-center justify-center rounded-full transition-all duration-500 ${
+                        isActive
+                          ? 'w-12 h-12 sm:w-14 sm:h-14 bg-cyan-950 border-3 border-[#2fcaee] text-xl sm:text-2xl shadow-[0_0_30px_rgba(47,202,238,0.9)] scale-110 ring-4 ring-[#2fcaee]/30'
+                          : isCompleted
+                          ? 'w-10 h-10 sm:w-12 sm:h-12 bg-emerald-950/80 border-2 border-[#26e200] text-base sm:text-lg shadow-[0_0_16px_rgba(38,226,0,0.6)]'
+                          : 'w-10 h-10 sm:w-11 sm:h-11 bg-slate-800/80 border-2 border-slate-700/60 text-base sm:text-lg opacity-40'
+                      }`}
+                    >
+                      {step.icon}
+                    </div>
+
+                    {/* Active Ping Beacon */}
+                    {isActive && (
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 z-10">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2fcaee] opacity-80"></span>
+                        <span className="relative inline-flex rounded-full h-4 w-4 bg-[#2fcaee] border-2 border-slate-900"></span>
+                      </span>
+                    )}
+
+                    {/* Completed Checkmark Badge */}
+                    {isCompleted && !isActive && (
+                      <span className="absolute -top-1 -right-1 bg-[#26e200] text-black text-[10px] font-black rounded-full w-4 h-4 flex items-center justify-center shadow-[0_0_8px_rgba(38,226,0,0.8)] z-10">
+                        ✓
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Stage Label */}
+                  <span
+                    className={`mt-2.5 text-xs text-center transition-colors ${
+                      isActive
+                        ? 'text-[#2fcaee] font-black tracking-wider uppercase drop-shadow-[0_0_8px_rgba(47,202,238,0.8)]'
+                        : isCompleted
+                        ? 'text-[#26e200] font-bold'
+                        : 'text-slate-500 font-medium'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+
+                  {/* Subtitle description */}
+                  <span className="text-[10px] text-slate-500 hidden sm:block mt-0.5 text-center">
+                    {step.desc}
+                  </span>
+                </div>
+
+                {/* Connecting Line Between Stages */}
+                {idx < PIPELINE_STEPS.length - 1 && (
+                  <div
+                    className={`w-6 sm:w-10 h-1 mb-8 shrink-0 rounded-full transition-all duration-500 ${
+                      isCompleted && (pipelineStatus.completedStages.includes(idx + 1) || pipelineStatus.activeStageIndex === idx + 1)
+                        ? 'bg-[#26e200] shadow-[0_0_10px_rgba(38,226,0,0.8)]'
+                        : isActive
+                        ? 'bg-gradient-to-r from-[#2fcaee] to-slate-800 animate-pulse'
+                        : 'bg-slate-800'
+                    }`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
       </div>
 
       {/* Pay-As-You-Go UPI Modal */}
