@@ -233,72 +233,82 @@ export function LandingPageClient({ session }: LandingPageProps) {
           <div className="inline-flex items-center gap-2 bg-black border-2 border-[#26e200] px-4 py-1.5 rounded-full brutal-shadow-green mb-8">
             <span className="w-2.5 h-2.5 rounded-full bg-[#26e200] animate-ping" />
             <span className="text-xs font-black uppercase text-[#26e200] tracking-widest">
-              Autonomous Faceless Video Engine
+              AIVideoGenerator • Automated Shorts & YouTube Publishing
             </span>
           </div>
 
-          {/* Massive Bonga-Bonga Inspired Headline */}
-          <h1 className="text-4xl sm:text-6xl md:text-8xl font-black tracking-tight text-white uppercase leading-[0.95] mb-6 select-none">
-            WTF IS <br />
-            <span className="text-[#fe017f] neon-text-pink">MOVIE DECODED</span> <br />
-            <span className="text-[#ffff00] neon-text-yellow">AI?</span>
+          {/* Primary App Title matching Google Cloud OAuth Consent Screen */}
+          <h1 className="text-4xl sm:text-6xl md:text-8xl font-black tracking-tight text-white uppercase leading-[0.95] mb-4 select-none">
+            AI<span className="text-[#fe017f] neon-text-pink">VIDEO</span><span className="text-[#ffff00] neon-text-yellow">GENERATOR</span>
           </h1>
 
-          <p className="text-base sm:text-xl font-bold text-[#ece1b2] max-w-2xl mx-auto leading-relaxed mb-10">
-            The unhinged, fully-automated content engine that researches movie lore, drafts viral dopamine scripts, syncs dual-brain visuals, and publishes directly to YouTube Shorts.
+          <p className="text-lg sm:text-2xl font-black text-[#2fcaee] uppercase tracking-wide mb-6">
+            AI Video Creation & YouTube Shorts Automation Platform
           </p>
 
-          {/* Interactive Bonga-Bonga Style Gatekeeper */}
-          <div className="max-w-md mx-auto bg-black border-4 border-black p-6 rounded-2xl brutal-shadow-pink relative mb-8">
-            
-            {showTrollError && (
-              <div className="absolute inset-0 bg-[#fe017f] text-black font-black flex flex-col items-center justify-center p-6 rounded-xl z-20 animate-wiggle">
-                <p className="text-xl uppercase mb-2">🚨 WRONG ANSWER!</p>
-                <p className="text-xs uppercase text-center">
-                  Nobody enjoys editing timeline keyframes for 4 hours. Opening autopilot mode now...
-                </p>
-              </div>
-            )}
+          <p className="text-base sm:text-lg font-medium text-slate-300 max-w-3xl mx-auto leading-relaxed mb-8">
+            AIVideoGenerator helps creators, educators, and storytellers automate the end-to-end production of engaging short-form commentary and educational videos. Connect your YouTube channel via official Google OAuth to preview, approve, and automatically publish 1080p vertical shorts with kinetic subtitles, neural narration, and split-screen visuals.
+          </p>
 
-            <div className="text-xs font-black uppercase text-[#2fcaee] mb-2 tracking-widest">
-              CONFIDENTIAL PROTOCOL
+          {/* Dedicated Transparent Purpose & Google API Compliance Card */}
+          <div className="max-w-3xl mx-auto bg-slate-900/90 border-2 border-[#2fcaee] p-6 rounded-2xl brutal-shadow-blue text-left mb-8 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xl">🎯</span>
+              <h3 className="text-sm font-black uppercase text-white tracking-wider">
+                Application Purpose & YouTube API Integration Notice
+              </h3>
             </div>
-            <h3 className="text-base font-black uppercase text-white mb-4">
-              ARE YOU READY TO STOP EDITING VIDEOS MANUALLY?
-            </h3>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4">
+              <strong>AIVideoGenerator</strong> uses Google OAuth 2.0 and the YouTube Data API v3 (<code className="text-[#2fcaee] bg-slate-950 px-1.5 py-0.5 rounded font-mono text-xs">youtube.upload</code>) strictly to enable authenticated users to publish their own human-reviewed, approved video content directly to their personal or brand YouTube channel.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-bold text-slate-300">
+              <div className="flex items-center gap-1.5 bg-black/60 p-2 rounded border border-slate-800">
+                <CheckCircle2 size={14} className="text-[#26e200] shrink-0" />
+                <span>Zero automatic uploads without manual approval</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-black/60 p-2 rounded border border-slate-800">
+                <CheckCircle2 size={14} className="text-[#26e200] shrink-0" />
+                <span>Google user data is never sold or shared</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-black/60 p-2 rounded border border-slate-800">
+                <CheckCircle2 size={14} className="text-[#26e200] shrink-0" />
+                <span>Strict prohibition of AI NCII & explicit content</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-black/60 p-2 rounded border border-slate-800">
+                <CheckCircle2 size={14} className="text-[#26e200] shrink-0" />
+                <span>Complies with Google API User Data Policy</span>
+              </div>
+            </div>
+          </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              {session?.user ? (
-                <Link
-                  href="/dashboard"
-                  className="w-full sm:w-auto bg-[#26e200] text-black text-sm font-black px-6 py-3 rounded-lg border-2 border-black brutal-shadow-green hover:translate-x-[2px] hover:translate-y-[2px] transition-all uppercase tracking-wider flex items-center justify-center gap-2"
-                >
-                  <span>LAUNCH STUDIO</span>
-                  <ArrowRight size={16} />
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-                  className="w-full sm:w-auto bg-[#fe017f] text-white text-sm font-black px-6 py-3 rounded-lg border-2 border-black brutal-shadow-pink hover:translate-x-[2px] hover:translate-y-[2px] transition-all uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>YES, LET AI PRINT IT</span>
-                  <ArrowRight size={16} />
-                </button>
-              )}
-
+          {/* Action CTAs: Clean and Completely Accessible without forced login */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+            {session?.user ? (
+              <Link
+                href="/dashboard"
+                className="w-full sm:w-auto bg-[#26e200] text-black text-sm font-black px-8 py-3.5 rounded-xl border-2 border-black brutal-shadow-green hover:translate-x-[2px] hover:translate-y-[2px] transition-all uppercase tracking-wider flex items-center justify-center gap-2"
+              >
+                <span>OPEN DASHBOARD STUDIO</span>
+                <ArrowRight size={16} />
+              </Link>
+            ) : (
               <button
                 type="button"
-                onClick={handleTrollClick}
-                className="w-full sm:w-auto bg-transparent text-slate-400 hover:text-white text-xs font-black px-4 py-3 rounded-lg border border-slate-700 hover:border-slate-500 uppercase tracking-wider transition-colors cursor-pointer"
+                onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+                className="w-full sm:w-auto bg-[#fe017f] text-white text-sm font-black px-8 py-3.5 rounded-xl border-2 border-black brutal-shadow-pink hover:translate-x-[2px] hover:translate-y-[2px] transition-all uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
               >
-                NO, I ENJOY SUFFERING
+                <span>SIGN IN WITH GOOGLE</span>
+                <ArrowRight size={16} />
               </button>
-            </div>
-            
-            <p className="text-[11px] text-slate-400 mt-4">
-              ⚡ Pay-as-you-go via UPI (Google Pay, PhonePe, Paytm). Starting at just ₹9 per video. No monthly commitments.
-            </p>
+            )}
+
+            <a
+              href="#about"
+              className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white text-sm font-black px-6 py-3.5 rounded-xl border-2 border-slate-700 hover:border-slate-500 uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>LEARN MORE & READ DISCLOSURES</span>
+              <ChevronDown size={16} />
+            </a>
           </div>
 
           {/* Quick Live Stats Pill Bar */}
