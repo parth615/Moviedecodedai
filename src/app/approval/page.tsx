@@ -16,12 +16,16 @@ export default async function ApprovalPage() {
   const userId = session.user.id;
 
   const pendingVideos = await prisma.video.findMany({
-    where: { script: { topic: { userId } }, status: 'READY_FOR_APPROVAL' },
+    where: { 
+      script: { topic: { userId } }, 
+      status: { in: ['READY_FOR_APPROVAL', 'COMPLETED'] }
+    },
     include: {
       script: {
         include: { topic: true, gameplayAsset: true, voiceAsset: true, visualAssets: true }
       }
-    }
+    },
+    orderBy: { createdAt: 'desc' }
   });
 
   const gameplayAssets = await prisma.gameplayAsset.findMany({

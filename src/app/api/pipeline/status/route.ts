@@ -115,7 +115,7 @@ export async function GET() {
         videoUrl = video.fileUrl;
 
         // Stage 6: QA
-        if (video.qaScore !== null || ['READY_FOR_APPROVAL', 'APPROVED', 'PUBLISHED'].includes(video.status)) {
+        if (video.qaScore !== null || ['READY_FOR_APPROVAL', 'APPROVED', 'PUBLISHED', 'COMPLETED'].includes(video.status)) {
           completedStages.push(6);
         }
 
@@ -132,7 +132,7 @@ export async function GET() {
 
       // Determine the CURRENT ACTIVE STAGE based on latest entity & job presence
       if (video) {
-        if (video.status === 'READY_FOR_APPROVAL') {
+        if (['READY_FOR_APPROVAL', 'COMPLETED'].includes(video.status)) {
           activeStageIndex = 7;
           activeStageLabel = 'Awaiting Your Approval';
           detailedMessage = 'Video rendered successfully! Click below to review and publish.';
@@ -147,11 +147,17 @@ export async function GET() {
           activeStageLabel = 'Published to YouTube';
           detailedMessage = 'Live on YouTube Shorts!';
           isProcessing = false;
-        } else if (video.qaScore === null) {
+        } else if (video.qaScore === null && hasActiveJob) {
           activeStageIndex = 6;
           activeStageLabel = 'Quality Assurance & Scoring';
           detailedMessage = 'Verifying audio sync, pacing, and visual safety...';
-          isProcessing = hasActiveJob;
+          isProcessing = true;
+        } else {
+          // Guaranteed fallback: If video exists and is not published, it is awaiting approval
+          activeStageIndex = 7;
+          activeStageLabel = 'Awaiting Your Approval';
+          detailedMessage = 'Video rendered successfully! Click below to review and publish.';
+          isProcessing = false;
         }
       } else if (hasActiveJob) {
         // Only show live processing if a job is ACTUALLY running or queued

@@ -338,7 +338,7 @@ export function DashboardClient({ stats, isPaused }: {
                     Reset
                   </button>
                 </div>
-              ) : pipelineStatus.activeStageIndex === 7 ? (
+              ) : (pipelineStatus.activeStageIndex === 7 || pipelineStatus.completedStages.includes(6) || (pipelineStatus.completedStages.includes(5) && !pipelineStatus.isProcessing)) ? (
                 <span className="inline-flex items-center gap-1.5 bg-[#26e200]/15 text-[#26e200] text-[11px] font-black px-2.5 py-0.5 rounded-full border border-[#26e200]/40">
                   <Check size={12} />
                   Ready For Approval
@@ -352,7 +352,7 @@ export function DashboardClient({ stats, isPaused }: {
           </div>
 
           {/* Direct CTA when video is ready for approval */}
-          {pipelineStatus.activeStageIndex === 7 && (
+          {(pipelineStatus.activeStageIndex === 7 || pipelineStatus.completedStages.includes(6) || (pipelineStatus.completedStages.includes(5) && !pipelineStatus.isProcessing)) && (
             <Link
               href="/approval"
               className="bg-[#26e200] hover:bg-[#20be00] text-black text-xs font-black px-4 py-2.5 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(38,226,0,0.5)] active:scale-95 transition-all shrink-0 w-fit"
