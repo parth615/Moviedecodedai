@@ -2,8 +2,8 @@ import { prisma } from './prisma';
 
 // Widened to string so new keys don't break TypeScript
 export const DEFAULT_SETTINGS: Record<string, string> = {
-  PROVIDER_MODE: 'mock',
-  DAILY_VIDEO_LIMIT: '10',
+  PROVIDER_MODE: 'production',
+  DAILY_VIDEO_LIMIT: '50',
   DAILY_BUDGET: '10.00',
   MINIMUM_QA_SCORE: '80',
   MINIMUM_RESEARCH_CONFIDENCE: '75',

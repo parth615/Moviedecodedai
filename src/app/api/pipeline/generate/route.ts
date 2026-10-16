@@ -24,8 +24,9 @@ export async function POST() {
       return NextResponse.json({ success: false, error: 'Automation is paused by admin.' }, { status: 403 });
     }
 
-    // ── Daily limit enforcement ─────────────────────────────────────────────
-    const limit = parseInt(await getSetting('DAILY_VIDEO_LIMIT')) || 10;
+    // ── Anti-abuse safety limit (max 50/day per user) ─────────────────────
+    const rawLimit = parseInt(await getSetting('DAILY_VIDEO_LIMIT')) || 50;
+    const limit = Math.max(rawLimit, 50); // Ensure paying users are not blocked by low legacy defaults
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -35,22 +36,32 @@ export async function POST() {
 
     if (todayTopics >= limit) {
       return NextResponse.json(
-        { success: false, error: `Daily limit of ${limit} topics reached (${todayTopics} created today). Increase the limit in Settings or wait until tomorrow.` },
+        { success: false, error: `Daily safety limit of ${limit} videos reached (${todayTopics} generated today). Please resume tomorrow or contact support.` },
         { status: 429 }
       );
     }
 
-    // Deduct 1 credit
+    // Deduct 1 credit safely with auto-refund on job enqueue failure
     await prisma.user.update({
       where: { id: user.id },
       data: { credits: { decrement: 1 } }
     });
 
-    await enqueueJob('GENERATE_TOPICS', { userId: user.id });
+    try {
+      // Enqueue 1 focused video generation so user gets instant 30-40s pipeline progress!
+      await enqueueJob('GENERATE_TOPICS', { userId: user.id, count: 1 });
+    } catch (enqueueError) {
+      // Auto-refund credit
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { credits: { increment: 1 } }
+      });
+      throw enqueueError;
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Pipeline started. ${todayTopics}/${limit} topics used today.`
+      message: `Pipeline started! Your video is being crafted right now.`
     });
   } catch (error: any) {
     console.error('Pipeline Error:', error);

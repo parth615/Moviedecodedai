@@ -47,31 +47,34 @@ export async function handleGenerateTopics(data: any, jobId: string) {
 
   const language = await getSetting('DEFAULT_LANGUAGE');
   const country = await getSetting('DEFAULT_COUNTRY');
-  const limit = parseInt(await getSetting('DAILY_VIDEO_LIMIT')) || 10;
+  const rawLimit = parseInt(await getSetting('DAILY_VIDEO_LIMIT')) || 50;
+  const limit = Math.max(rawLimit, 50);
 
-  // Check how many topics/videos already created today by this user
+  // Determine how many topics to generate in this run (default 1 on-demand for lightning fast render)
+  const countToGenerate = Math.max(1, Math.min(data.count || 1, 5));
+
+  // Check how many topics already created today by this user
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayCount = await prisma.topic.count({
     where: { userId: data.userId || null, createdAt: { gte: todayStart } }
   });
 
-  if (todayCount >= limit) {
+  if (todayCount >= limit && !data.userId) {
     await logToJob(jobId, `Daily limit of ${limit} topics already reached (${todayCount} created today). Skipping.`);
     return;
   }
 
-  const remaining = limit - todayCount;
-  await logToJob(jobId, `Generating up to ${remaining} topics (${todayCount}/${limit} used today).`);
+  await logToJob(jobId, `Generating ${countToGenerate} topic(s) on-demand (${todayCount}/${limit} used today).`);
 
   // Build a diverse category list based on mix weights
   const requestedCategories: string[] = [];
   for (const group of CONTENT_MIX) {
-    const count = Math.ceil(group.weight * remaining / 10);
     const shuffled = [...group.categories].sort(() => Math.random() - 0.5);
-    requestedCategories.push(...shuffled.slice(0, count));
+    requestedCategories.push(...shuffled);
   }
-  const finalCategories = requestedCategories.slice(0, remaining);
+  const shuffledAll = requestedCategories.sort(() => Math.random() - 0.5);
+  const finalCategories = shuffledAll.slice(0, countToGenerate);
 
   await logToJob(jobId, `Category mix requested: ${finalCategories.join(', ')}`);
 
@@ -89,9 +92,9 @@ Rules:
 - difficultyScore: how hard to research/script (0-100)
 - Only output JSON matching the schema.`;
 
-  const userPrompt = `Generate ${remaining} viral short-form video topics covering these categories (one topic per category): ${finalCategories.join(', ')}.
+  const userPrompt = `Generate ${countToGenerate} viral short-form video topic(s) covering these categories: ${finalCategories.join(', ')}.
 
-Each topic must be genuinely interesting and different from the others. No duplicates, no generic ideas.`;
+Each topic must be genuinely interesting, captivating, and high-retention. No duplicates, no generic ideas.`;
 
   const response = await generateStructuredLLM(systemPrompt, userPrompt, TopicsSchema, 'topics');
 

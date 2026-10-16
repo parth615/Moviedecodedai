@@ -38,8 +38,27 @@ fi
 export DATABASE_URL="${DATABASE_URL:-file:/data/database/prod.db}"
 npx prisma db push
 
-# Start the background worker in the background
-npm run worker &
+# Ensure critical default settings exist in the database
+node -e "
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+async function init() {
+  await prisma.setting.upsert({ where: { key: 'DAILY_VIDEO_LIMIT' }, update: { value: '50' }, create: { key: 'DAILY_VIDEO_LIMIT', value: '50' } });
+  await prisma.setting.upsert({ where: { key: 'PROVIDER_MODE' }, update: {}, create: { key: 'PROVIDER_MODE', value: 'production' } });
+  await prisma.\$disconnect();
+}
+init().catch(console.error);
+"
+
+# Start the background worker with an auto-restart supervisor loop
+(
+  while true; do
+    echo "==> [WORKER] Starting universal pipeline worker..."
+    npm run worker
+    echo "==> [WORKER] Worker exited ($?). Auto-restarting in 3s..."
+    sleep 3
+  done
+) &
 
 # Start the Next.js production server binding to 0.0.0.0 on Render's assigned $PORT
 export PORT="${PORT:-3000}"

@@ -48,6 +48,7 @@ export function DashboardClient({ stats, isPaused }: {
   const [isUpiModalOpen, setIsUpiModalOpen] = useState(false);
   const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
   const [initialRedeemToken, setInitialRedeemToken] = useState('');
+  const [livePendingApproval, setLivePendingApproval] = useState(stats.pendingApproval);
 
   // Live Pipeline Progress State
   const [pipelineStatus, setPipelineStatus] = useState<{
@@ -106,6 +107,9 @@ export function DashboardClient({ stats, isPaused }: {
           } else {
             setIsGenerating(false);
           }
+          if (data.activeStageIndex === 7) {
+            setLivePendingApproval((prev) => Math.max(prev, 1));
+          }
         }
       }
     } catch (_) {}
@@ -114,8 +118,8 @@ export function DashboardClient({ stats, isPaused }: {
   useEffect(() => {
     fetchCredits();
     fetchPipelineStatus();
-    // Poll every 3.5 seconds to track real-time job progress across stages
-    const interval = setInterval(fetchPipelineStatus, 3500);
+    // Poll every 3 seconds to track real-time job progress across stages
+    const interval = setInterval(fetchPipelineStatus, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -137,7 +141,7 @@ export function DashboardClient({ stats, isPaused }: {
       const res = await fetch('/api/pipeline/generate', { method: 'POST' });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage('✓ Pipeline initiated! Watch the stages glow as each asset is created.');
+        setMessage('✓ Video pipeline initiated! Watch the stages glow as your video is generated.');
         setMessageType('success');
         setCredits((prev) => Math.max(0, prev - 1));
         // Immediately fetch updated status
@@ -173,7 +177,7 @@ export function DashboardClient({ stats, isPaused }: {
   const statCards = [
     { name: 'Video Credits', value: `${credits} Left`, icon: Coins, color: '#26e200' },
     { name: 'Generated Today', value: stats.generated, icon: Play, color: '#3b82f6' },
-    { name: 'Awaiting Approval', value: String(stats.pendingApproval), icon: Clock, color: '#f59e0b' },
+    { name: 'Awaiting Approval', value: String(livePendingApproval), icon: Clock, color: '#f59e0b' },
     { name: 'Approved', value: String(stats.approved), icon: CheckCircle, color: '#10b981' },
     { name: 'Published', value: String(stats.published), icon: ArrowRight, color: '#8b5cf6' },
   ];
