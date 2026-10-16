@@ -29,12 +29,62 @@ async function getRealAudioDuration(filepath: string): Promise<number> {
   }
 }
 
-// ─── Mock TTS ─────────────────────────────────────────────────────────────────
-class MockTTSProvider implements TTSProvider {
+// ─── Free Google Translate Neural Speech (High-Reliability Fallback) ─────────────
+class GoogleTTSProvider implements TTSProvider {
   async generateSpeech(text: string, _voiceId?: string) {
-    const duration = estimateDuration(text);
+    const filename = `voice_google_${Date.now()}.mp3`;
+    const filepath = path.join(process.cwd(), 'public', 'audio', filename);
+    fs.mkdirSync(path.dirname(filepath), { recursive: true });
+
+    // Split text into readable chunks <= 180 chars for the Google TTS endpoint
+    const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+    const chunks: string[] = [];
+
+    for (const s of sentences) {
+      if (!s.trim()) continue;
+      if (s.length > 180) {
+        const words = s.split(' ');
+        let cur = '';
+        for (const w of words) {
+          if ((cur + ' ' + w).length > 180) {
+            chunks.push(cur.trim());
+            cur = w;
+          } else {
+            cur += ' ' + w;
+          }
+        }
+        if (cur.trim()) chunks.push(cur.trim());
+      } else {
+        chunks.push(s.trim());
+      }
+    }
+
+    const buffers: Buffer[] = [];
+    for (const chunk of chunks) {
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunk)}&tl=en&client=tw-ob`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        buffers.push(Buffer.from(buf));
+      }
+    }
+
+    if (buffers.length === 0) {
+      throw new Error('Google TTS returned no audio data');
+    }
+
+    const combined = Buffer.concat(buffers);
+    fs.writeFileSync(filepath, combined);
+
+    let duration = await getRealAudioDuration(filepath);
+    if (duration === 0) duration = estimateDuration(text);
+
     return {
-      audioUrl: '/audio/mock.mp3',
+      audioUrl: `/audio/${filename}`,
       duration,
       cost: 0
     };
@@ -73,15 +123,13 @@ class ElevenLabsProvider implements TTSProvider {
     }
 
     const audioBuffer = await response.arrayBuffer();
-
     const filename = `voice_${Date.now()}.mp3`;
     const filepath = path.join(process.cwd(), 'public', 'audio', filename);
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
     fs.writeFileSync(filepath, Buffer.from(audioBuffer));
 
-    // Get EXACT real duration from the file using ffprobe
     let duration = await getRealAudioDuration(filepath);
-    if (duration === 0) duration = estimateDuration(text); // fallback
+    if (duration === 0) duration = estimateDuration(text);
 
     const cost = (text.length / 1000) * 0.30;
 
@@ -106,9 +154,8 @@ class EdgeTTSProvider implements TTSProvider {
 
     await tts.ttsPromise(text, filepath);
 
-    // Get EXACT real duration from the file using ffprobe
     let duration = await getRealAudioDuration(filepath);
-    if (duration === 0) duration = estimateDuration(text); // fallback
+    if (duration === 0) duration = estimateDuration(text);
 
     return {
       audioUrl: `/audio/${filename}`,
@@ -118,23 +165,64 @@ class EdgeTTSProvider implements TTSProvider {
   }
 }
 
-// ─── Fallback Wrapper ─────────────────────────────────────────────────────────
-class FallbackTTSProvider implements TTSProvider {
-  async generateSpeech(text: string, voiceId?: string) {
-    try {
-      const primary = new ElevenLabsProvider();
-      return await primary.generateSpeech(text, voiceId);
-    } catch (e: any) {
-      console.warn('[TTS FALLBACK] ElevenLabs error:', e.message);
+// ─── Guaranteed Mock TTS (Physical file synthesis) ───────────────────────────
+class MockTTSProvider implements TTSProvider {
+  async generateSpeech(text: string, _voiceId?: string) {
+    const duration = estimateDuration(text);
+    const filename = 'mock.mp3';
+    const filepath = path.join(process.cwd(), 'public', 'audio', filename);
+    fs.mkdirSync(path.dirname(filepath), { recursive: true });
+
+    // Ensure mock.mp3 physically exists on disk so FFmpeg NEVER chokes
+    if (!fs.existsSync(filepath) || fs.statSync(filepath).size === 0) {
       try {
-        const fallback = new EdgeTTSProvider();
-        return await fallback.generateSpeech(text, voiceId);
-      } catch (edgeErr: any) {
-        console.warn('[TTS FALLBACK] EdgeTTS failed, using mock audio:', edgeErr.message);
-        const mock = new MockTTSProvider();
-        return await mock.generateSpeech(text, voiceId);
+        await execAsync(`ffmpeg -f lavfi -i "sine=frequency=440:duration=${duration}" -c:a libmp3lame -b:a 128k -y "${filepath}"`);
+      } catch (_) {
+        // Safe minimal fallback
+        fs.writeFileSync(filepath, Buffer.alloc(1024));
       }
     }
+
+    return {
+      audioUrl: `/audio/${filename}`,
+      duration,
+      cost: 0
+    };
+  }
+}
+
+// ─── Universal Fallback Wrapper ─────────────────────────────────────────────
+class FallbackTTSProvider implements TTSProvider {
+  async generateSpeech(text: string, voiceId?: string) {
+    // 1. ElevenLabs (if user provided key)
+    if (process.env.ELEVENLABS_API_KEY) {
+      try {
+        const primary = new ElevenLabsProvider();
+        return await primary.generateSpeech(text, voiceId);
+      } catch (e: any) {
+        console.warn('[TTS FALLBACK] ElevenLabs error:', e.message);
+      }
+    }
+
+    // 2. Google Speech (100% Free, zero key required, fast & reliable)
+    try {
+      const google = new GoogleTTSProvider();
+      return await google.generateSpeech(text, voiceId);
+    } catch (gErr: any) {
+      console.warn('[TTS FALLBACK] Google TTS error:', gErr.message);
+    }
+
+    // 3. EdgeTTS (if available)
+    try {
+      const edge = new EdgeTTSProvider();
+      return await edge.generateSpeech(text, voiceId);
+    } catch (edgeErr: any) {
+      console.warn('[TTS FALLBACK] EdgeTTS failed:', edgeErr.message);
+    }
+
+    // 4. Physical Mock Audio file (synthesized tone with real duration)
+    const mock = new MockTTSProvider();
+    return await mock.generateSpeech(text, voiceId);
   }
 }
 
@@ -144,4 +232,3 @@ export async function getTTSProvider(): Promise<TTSProvider> {
   if (mode === 'mock') return new MockTTSProvider();
   return new FallbackTTSProvider();
 }
-

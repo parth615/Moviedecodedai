@@ -51,6 +51,7 @@ public/audio/*
 !public/video/.gitkeep
 !public/videos/.gitkeep
 !public/audio/.gitkeep
+!public/audio/mock.mp3
 !public/images/*
 *.mov
 

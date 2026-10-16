@@ -16,6 +16,10 @@ if [ -d "/app/public/images" ]; then
   cp -rn /app/public/images/* /data/images/ 2>/dev/null || true
 fi
 
+if [ -d "/app/public/audio" ]; then
+  cp -rn /app/public/audio/* /data/audio/ 2>/dev/null || true
+fi
+
 # Symlink persistent storage into Next.js public directory so media can be served
 rm -rf /app/public/video
 ln -s /data/video /app/public/video
