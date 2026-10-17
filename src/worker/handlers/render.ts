@@ -181,132 +181,116 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       };
     });
 
-    let inputs = '';
-    let filterComplex = '';
-    let lastMap = '[bg]';
-
-    // Set up inputs and background filter (True 50/50 Split Screen)
-    if (gameplayPath && fs.existsSync(gameplayPath)) {
-      await logToJob(jobId, `Using gameplay footage: ${path.basename(gameplayPath)}`);
-      // Create a black 1080x1920 canvas, scale gameplay to 1080x960, and overlay at bottom (0:960)
-      filterComplex += `color=c=black:s=1080x1920:d=${duration}[canvas];[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[gameplay];[canvas][gameplay]overlay=0:960[bg];`;
-    } else {
-      await logToJob(jobId, `No gameplay footage found. Generating colorful abstract background.`);
-      gameplayPath = "gradients=s=1080x1920:c0=0x6366f1:c1=0xec4899:duration=120:speed=0.2"; // Lavfi input
-      filterComplex += `color=c=black:s=1080x1920:d=${duration}[canvas];[0:v]scale=1080:960,setsar=1[gameplay];[canvas][gameplay]overlay=0:960[bg];`;
-    }
-
-    // Process visual assets synchronized with scene narration timings
+    // 5. Build high-speed lightweight split-screen engine using FFmpeg concat & vstack
+    // Top half: scene images slideshow (reads 1 image at a time, <30MB RAM)
+    // Bottom half: gameplay footage scaled to 1080x960
+    // Combined via vstack to form pristine 1080x1920 (9:16 vertical shorts)
+    const slideshowPath = path.join(process.cwd(), 'public', 'video', `slideshow_${scriptId}_${Date.now()}.txt`);
     const validSceneVisuals = sceneTimings.filter((st: any) => st.visual && fs.existsSync(st.visual.absPath));
+    let hasSlideshow = false;
 
     if (validSceneVisuals.length > 0) {
-      await logToJob(jobId, `Synchronizing ${validSceneVisuals.length} scene visuals to narration timing...`);
-      let currentBg = 'bg';
-
-      validSceneVisuals.forEach((st: any, i: number) => {
-        const inputIndex = i + 2; // 0=gameplay, 1=audio, 2..N=scene visuals
-        const isVideo = st.visual.assetType === 'video' || st.visual.absPath.endsWith('.mp4');
-
-        if (isVideo) {
-          inputs += ` -stream_loop -1 -i "${st.visual.absPath}"`;
-        } else {
-          inputs += ` -loop 1 -t ${duration} -i "${st.visual.absPath}"`;
-        }
-
-        const sceneDuration = Math.max(1, Math.ceil(st.endT - st.startT));
-        if (isVideo) {
-          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
-        } else {
-          // Clean, crisp high-res 1080x960 image crop without CPU-choking zoompan
-          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
-        }
-
-        filterComplex += `[${currentBg}][img${i}]overlay=0:0:enable='between(t,${st.startT},${st.endT})'[v${i}];`;
-        currentBg = `v${i}`;
+      await logToJob(jobId, `Creating high-speed slideshow manifest for ${validSceneVisuals.length} scenes...`);
+      const lines: string[] = [];
+      validSceneVisuals.forEach((st: any) => {
+        const d = Math.max(0.5, parseFloat((st.endT - st.startT).toFixed(2)));
+        lines.push(`file '${st.visual.absPath.replace(/'/g, "'\\''")}'`);
+        lines.push(`duration ${d}`);
       });
-
-      lastMap = `[${currentBg}]`;
+      // FFmpeg concat demuxer requirement: repeat final image entry without duration
+      lines.push(`file '${validSceneVisuals[validSceneVisuals.length - 1].visual.absPath.replace(/'/g, "'\\''")}'`);
+      fs.writeFileSync(slideshowPath, lines.join('\n'));
+      hasSlideshow = true;
     } else if (sortedVisuals.length > 0) {
-      // Fallback if scenes weren't parseable: divide equally across sorted visuals
-      await logToJob(jobId, `Fallback: Injecting ${sortedVisuals.length} visual assets into render pipeline...`);
-      const durationPerVisual = duration / sortedVisuals.length;
-      let currentBg = 'bg';
-
-      sortedVisuals.forEach((visual, i) => {
-        const inputIndex = i + 2;
-        if (visual.assetType === 'video' || visual.absPath.endsWith('.mp4')) {
-          inputs += ` -stream_loop -1 -i "${visual.absPath}"`;
-        } else {
-          inputs += ` -loop 1 -t ${duration} -i "${visual.absPath}"`;
-        }
-
-        const startT = (i * durationPerVisual).toFixed(2);
-        const endT = ((i + 1) * durationPerVisual).toFixed(2);
-
-        if (visual.assetType === 'video' || visual.absPath.endsWith('.mp4')) {
-          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
-        } else {
-          filterComplex += `[${inputIndex}:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1[img${i}];`;
-        }
-        filterComplex += `[${currentBg}][img${i}]overlay=0:0:enable='between(t,${startT},${endT})'[v${i}];`;
-        currentBg = `v${i}`;
+      await logToJob(jobId, `Creating slideshow manifest for ${sortedVisuals.length} visuals...`);
+      const durationPerVisual = Math.max(0.5, parseFloat((duration / sortedVisuals.length).toFixed(2)));
+      const lines: string[] = [];
+      sortedVisuals.forEach((v) => {
+        lines.push(`file '${v.absPath.replace(/'/g, "'\\''")}'`);
+        lines.push(`duration ${durationPerVisual}`);
       });
-
-      lastMap = `[${currentBg}]`;
+      lines.push(`file '${sortedVisuals[sortedVisuals.length - 1].absPath.replace(/'/g, "'\\''")}'`);
+      fs.writeFileSync(slideshowPath, lines.join('\n'));
+      hasSlideshow = true;
     }
 
-    // Save no-subtitles filter complex as foolproof fallback
-    const filterComplexNoSubs = filterComplex.endsWith(';') ? filterComplex.slice(0, -1) : filterComplex;
-    const lastMapNoSubs = lastMap;
+    // Top half input configuration
+    const topInputArg = hasSlideshow
+      ? `-f concat -safe 0 -i "${slideshowPath}"`
+      : `-f lavfi -i "color=c=0x1e1b4b:s=1080x960:d=${duration}"`;
+    const topFilter = hasSlideshow
+      ? `[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,fps=30[top]`
+      : `[0:v]setsar=1,fps=30[top]`;
 
-    // Apply Subtitles
-    if (assContent) {
+    // Bottom half (gameplay) input configuration
+    let bottomInputArg: string;
+    let bottomFilter: string;
+
+    if (gameplayPath && fs.existsSync(gameplayPath) && !gameplayPath.startsWith('gradients=')) {
+      await logToJob(jobId, `Using gameplay footage: ${path.basename(gameplayPath)}`);
+      bottomInputArg = `-stream_loop -1 -i "${gameplayPath}"`;
+      bottomFilter = `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,fps=30[bottom]`;
+    } else {
+      await logToJob(jobId, `Generating dark canvas for bottom gameplay split...`);
+      bottomInputArg = `-f lavfi -i "color=c=0x0f172a:s=1080x960:d=${duration}"`;
+      bottomFilter = `[1:v]setsar=1,fps=30[bottom]`;
+    }
+
+    const baseFilter = `${topFilter};${bottomFilter};[top][bottom]vstack[v]`;
+
+    // Try primary render with kinetic ASS subtitles
+    let renderedSuccess = false;
+    if (assContent && fs.existsSync(assPath)) {
       const escapedAssPath = assPath.replace(/:/g, '\\:').replace(/\\/g, '\\\\');
-      filterComplex += `${lastMap}ass='${escapedAssPath}'[final]`;
-      lastMap = `[final]`;
-    } else {
-      // Remove trailing semicolon if no subtitles were added
-      if (filterComplex.endsWith(';')) {
-        filterComplex = filterComplex.slice(0, -1);
-      }
-    }
+      const filterWithSubs = `${baseFilter},ass='${escapedAssPath}'[final]`;
+      const cmdWithSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${filterWithSubs}" -map "[final]" -map 2:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
 
-    // Final Command Assembly: ultrafast preset with 2 threads for instant cloud container render
-    let cmd: string;
-    if (gameplayPath.startsWith('gradients=')) {
-      cmd = `ffmpeg -f lavfi -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplex}" -map "${lastMap}" -map 1:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
-    } else {
-      cmd = `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplex}" -map "${lastMap}" -map 1:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
-    }
-
-    try {
-      await logToJob(jobId, `Running FFmpeg ultra-fast render...`);
-      await execAsync(cmd, { timeout: 60000, maxBuffer: 50 * 1024 * 1024 });
-      
-      // Cleanup subtitle file
-      if (fs.existsSync(assPath)) fs.unlinkSync(assPath);
-    } catch (ffErr: any) {
-      await logToJob(jobId, `Primary render with subtitles failed (${ffErr.stderr || ffErr.message}). Rendering without subtitles...`);
       try {
-        const cmdNoSubs = gameplayPath.startsWith('gradients=')
-          ? `ffmpeg -f lavfi -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplexNoSubs}" -map "${lastMapNoSubs}" -map 1:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`
-          : `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}"${inputs} -filter_complex "${filterComplexNoSubs}" -map "${lastMapNoSubs}" -map 1:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
-        await execAsync(cmdNoSubs, { timeout: 60000, maxBuffer: 50 * 1024 * 1024 });
-        await logToJob(jobId, `Rendered 1080p split-screen video successfully.`);
-      } catch (noSubsErr: any) {
-        await logToJob(jobId, `Secondary render failed (${noSubsErr.stderr || noSubsErr.message}). Using rapid fallback...`);
-        try {
-          const fallbackCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -i "${audioPath}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
-          await execAsync(fallbackCmd, { timeout: 30000 });
-          await logToJob(jobId, `Used simple fallback render (solid dark background + audio).`);
-        } catch (finalErr: any) {
-          console.error('Secondary fallback failed, invoking guaranteed emergency canvas render:', finalErr);
-          const guaranteedCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -f lavfi -i "sine=frequency=440:duration=${duration}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
-          await execAsync(guaranteedCmd, { timeout: 30000 });
-          await logToJob(jobId, `Used guaranteed emergency canvas render.`);
+        await logToJob(jobId, `Running FFmpeg ultra-fast split-screen render (with subtitles)...`);
+        await execAsync(cmdWithSubs, { timeout: 120000, maxBuffer: 50 * 1024 * 1024 });
+        if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1000) {
+          renderedSuccess = true;
+          await logToJob(jobId, `Rendered 1080p split-screen with kinetic captions!`);
         }
+      } catch (subErr: any) {
+        await logToJob(jobId, `Subtitle render warning (${subErr.stderr || subErr.message}). Rendering split-screen without subtitles...`);
       }
     }
+
+    // Secondary render without subtitles if primary failed or had no subtitles
+    if (!renderedSuccess) {
+      const cmdNoSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${baseFilter}" -map "[v]" -map 2:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
+      try {
+        await logToJob(jobId, `Running FFmpeg split-screen render...`);
+        await execAsync(cmdNoSubs, { timeout: 120000, maxBuffer: 50 * 1024 * 1024 });
+        if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1000) {
+          renderedSuccess = true;
+          await logToJob(jobId, `Rendered 1080p split-screen video successfully!`);
+        }
+      } catch (noSubErr: any) {
+        await logToJob(jobId, `Secondary render warning (${noSubErr.stderr || noSubErr.message}). Invoking guaranteed emergency canvas render...`);
+      }
+    }
+
+    // Tertiary emergency canvas fallback
+    if (!renderedSuccess) {
+      const fallbackCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -i "${audioPath}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
+      try {
+        await execAsync(fallbackCmd, { timeout: 60000, maxBuffer: 20 * 1024 * 1024 });
+        renderedSuccess = true;
+        await logToJob(jobId, `Used emergency canvas fallback render.`);
+      } catch (finalErr: any) {
+        console.error('Final fallback failed:', finalErr);
+        const guaranteedCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -f lavfi -i "sine=frequency=440:duration=${duration}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
+        await execAsync(guaranteedCmd, { timeout: 60000 });
+        renderedSuccess = true;
+        await logToJob(jobId, `Used guaranteed canvas render.`);
+      }
+    }
+
+    // Cleanup temporary manifests
+    if (fs.existsSync(slideshowPath)) try { fs.unlinkSync(slideshowPath); } catch (_) {}
+    if (fs.existsSync(assPath)) try { fs.unlinkSync(assPath); } catch (_) {}
 
     // Strict validation: outPath MUST exist and have positive size!
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size === 0) {
