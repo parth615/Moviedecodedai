@@ -10,11 +10,23 @@ import fs from 'fs';
  * Falls back to generating a colorful abstract background if none exist.
  */
 function pickGameplayVideo(): string | null {
-  const gpDir = path.join(process.cwd(), 'public', 'gameplay');
-  if (!fs.existsSync(gpDir)) return null;
-  const files = fs.readdirSync(gpDir).filter(f => f.endsWith('.mp4') || f.endsWith('.mov'));
-  if (files.length === 0) return null;
-  return path.join(gpDir, files[Math.floor(Math.random() * files.length)]);
+  const dirs = [
+    '/data/gameplay',
+    path.join(process.cwd(), 'public', 'gameplay'),
+    '/app/public/gameplay',
+    path.join(process.cwd(), 'gameplay'),
+  ];
+  for (const dir of dirs) {
+    try {
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.mp4') || f.endsWith('.mov'));
+        if (files.length > 0) {
+          return path.join(dir, files[Math.floor(Math.random() * files.length)]);
+        }
+      }
+    } catch (_) {}
+  }
+  return null;
 }
 
 /**
@@ -231,8 +243,8 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       bottomInputArg = `-stream_loop -1 -i "${gameplayPath}"`;
       bottomFilter = `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,fps=30[bottom]`;
     } else {
-      await logToJob(jobId, `Generating dark canvas for bottom gameplay split...`);
-      bottomInputArg = `-f lavfi -i "color=c=0x0f172a:s=1080x960:d=${duration}"`;
+      await logToJob(jobId, `Generating animated cosmic fractal for bottom gameplay split...`);
+      bottomInputArg = `-f lavfi -i "mandelbrot=s=1080x960:rate=30,format=yuv420p"`;
       bottomFilter = `[1:v]setsar=1,fps=30[bottom]`;
     }
 
@@ -242,7 +254,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     let renderedSuccess = false;
     if (assContent && fs.existsSync(assPath)) {
       const escapedAssPath = assPath.replace(/:/g, '\\:').replace(/\\/g, '\\\\');
-      const filterWithSubs = `${baseFilter},ass='${escapedAssPath}'[final]`;
+      const filterWithSubs = `${baseFilter};[v]ass='${escapedAssPath}'[final]`;
       const cmdWithSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${filterWithSubs}" -map "[final]" -map 2:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
 
       try {

@@ -7,31 +7,33 @@ mkdir -p /data/images
 mkdir -p /data/audio
 mkdir -p /data/gameplay
 
-# Copy built-in gameplay videos and scene images to persistent storage if not already there
+# Sync built-in gameplay videos, scene images, and audio across both storage locations
 if [ -d "/app/public/gameplay" ]; then
   cp -rn /app/public/gameplay/* /data/gameplay/ 2>/dev/null || true
+fi
+if [ -d "/data/gameplay" ]; then
+  cp -rn /data/gameplay/* /app/public/gameplay/ 2>/dev/null || true
 fi
 
 if [ -d "/app/public/images" ]; then
   cp -rn /app/public/images/* /data/images/ 2>/dev/null || true
 fi
+if [ -d "/data/images" ]; then
+  cp -rn /data/images/* /app/public/images/ 2>/dev/null || true
+fi
 
 if [ -d "/app/public/audio" ]; then
   cp -rn /app/public/audio/* /data/audio/ 2>/dev/null || true
 fi
+if [ -d "/data/audio" ]; then
+  cp -rn /data/audio/* /app/public/audio/ 2>/dev/null || true
+fi
 
-# Symlink persistent storage into Next.js public directory so media can be served
-rm -rf /app/public/video
-ln -s /data/video /app/public/video
-
-rm -rf /app/public/images
-ln -s /data/images /app/public/images
-
-rm -rf /app/public/audio
-ln -s /data/audio /app/public/audio
-
-rm -rf /app/public/gameplay
-ln -s /data/gameplay /app/public/gameplay
+# Ensure /app/public/video directory exists
+mkdir -p /app/public/video
+if [ -d "/data/video" ]; then
+  cp -rn /data/video/* /app/public/video/ 2>/dev/null || true
+fi
 
 # Default NEXTAUTH_URL if not set
 if [ -z "$NEXTAUTH_URL" ]; then

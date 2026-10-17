@@ -10,7 +10,20 @@ import path from 'path';
  * Ensures the destination file ALWAYS exists locally on disk.
  */
 async function downloadImageForPrompt(prompt: string, destPath: string): Promise<{ success: boolean; provider: string }> {
-  // 1. DuckDuckGo Image Search
+  // 1. Pollinations AI Image Generation (Ultra-High Quality Custom Visuals)
+  try {
+    const aiUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + ', cinematic 8k photorealistic high quality wallpaper') }?width=1080&height=1080&nologo=true`;
+    const aiRes = await fetch(aiUrl, { signal: AbortSignal.timeout(10000) });
+    if (aiRes.ok) {
+      const buf = Buffer.from(await aiRes.arrayBuffer());
+      if (buf.length > 5000) {
+        fs.writeFileSync(destPath, buf);
+        return { success: true, provider: 'PollinationsAI' };
+      }
+    }
+  } catch (_) {}
+
+  // 2. DuckDuckGo Image Search
   try {
     const res1 = await fetch('https://duckduckgo.com/?q=' + encodeURIComponent(prompt), {
       headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
@@ -186,6 +199,37 @@ export async function handleGenerateVisuals(data: { scriptId: string }, jobId: s
         assetUrl = `/images/${imageFilename}`;
         providerName = 'LocalPlaceholder';
         assetType = 'image';
+
+        // Physically ensure imagePath exists on disk so slideshow transitions flawlessly
+        const sampleDirs = [
+          path.join(process.cwd(), 'public', 'images'),
+          '/data/images',
+          '/app/public/images'
+        ];
+        let copied = false;
+        for (const dir of sampleDirs) {
+          if (fs.existsSync(dir)) {
+            const available = fs.readdirSync(dir).filter(f => f.endsWith('.jpg') || f.endsWith('.png'));
+            if (available.length > 0) {
+              const srcImg = path.join(dir, available[(sceneNum - 1) % available.length]);
+              if (fs.existsSync(srcImg) && srcImg !== imagePath) {
+                try {
+                  fs.copyFileSync(srcImg, imagePath);
+                  copied = true;
+                  break;
+                } catch (_) {}
+              }
+            }
+          }
+        }
+        if (!copied && (!fs.existsSync(imagePath) || fs.statSync(imagePath).size === 0)) {
+          const colors = ['0x1e1b4b', '0x0f172a', '0x312e81', '0x172554', '0x042f2e'];
+          const col = colors[(sceneNum - 1) % colors.length];
+          try {
+            const { execSync } = require('child_process');
+            execSync(`ffmpeg -f lavfi -i "color=c=${col}:s=1080x1080" -frames:v 1 -y "${imagePath}"`);
+          } catch (_) {}
+        }
       }
     }
 

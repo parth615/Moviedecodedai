@@ -194,30 +194,30 @@ class MockTTSProvider implements TTSProvider {
 // ─── Universal Fallback Wrapper ─────────────────────────────────────────────
 class FallbackTTSProvider implements TTSProvider {
   async generateSpeech(text: string, voiceId?: string) {
-    // 1. ElevenLabs (if user provided key)
-    if (process.env.ELEVENLABS_API_KEY) {
-      try {
-        const primary = new ElevenLabsProvider();
-        return await primary.generateSpeech(text, voiceId);
-      } catch (e: any) {
-        console.warn('[TTS FALLBACK] ElevenLabs error:', e.message);
-      }
-    }
-
-    // 2. Google Speech (100% Free, zero key required, fast & reliable)
-    try {
-      const google = new GoogleTTSProvider();
-      return await google.generateSpeech(text, voiceId);
-    } catch (gErr: any) {
-      console.warn('[TTS FALLBACK] Google TTS error:', gErr.message);
-    }
-
-    // 3. EdgeTTS (if available)
+    // 1. Microsoft Edge Neural Speech (Ultra-realistic, studio-grade human narrator, 100% Free)
     try {
       const edge = new EdgeTTSProvider();
       return await edge.generateSpeech(text, voiceId);
     } catch (edgeErr: any) {
-      console.warn('[TTS FALLBACK] EdgeTTS failed:', edgeErr.message);
+      console.warn('[TTS] EdgeTTS failed, falling back:', edgeErr.message);
+    }
+
+    // 2. ElevenLabs (if user provided valid key)
+    if (process.env.ELEVENLABS_API_KEY && !process.env.ELEVENLABS_API_KEY.includes('mock')) {
+      try {
+        const primary = new ElevenLabsProvider();
+        return await primary.generateSpeech(text, voiceId);
+      } catch (e: any) {
+        console.warn('[TTS] ElevenLabs error:', e.message);
+      }
+    }
+
+    // 3. Google Speech fallback
+    try {
+      const google = new GoogleTTSProvider();
+      return await google.generateSpeech(text, voiceId);
+    } catch (gErr: any) {
+      console.warn('[TTS] Google TTS error:', gErr.message);
     }
 
     // 4. Physical Mock Audio file (synthesized tone with real duration)
