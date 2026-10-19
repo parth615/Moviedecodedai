@@ -46,8 +46,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,85,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,5,40,40,0,1
-Style: Highlight,Arial,95,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,4,5,40,40,0,1
+Style: Default,DejaVu Sans,85,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,5,40,40,0,1
+Style: Highlight,DejaVu Sans,95,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,4,5,40,40,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -201,38 +201,58 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     const validSceneVisuals = sceneTimings.filter((st: any) => st.visual && fs.existsSync(st.visual.absPath));
     let hasSlideshow = false;
 
+    // Helper: normalize image to exactly 1080x960 yuv420p so FFmpeg concat demuxer NEVER chokes on dimension/format changes
+    const normDir = path.join(process.cwd(), 'public', 'video', 'norm');
+    fs.mkdirSync(normDir, { recursive: true });
+
+    const normalizeImage = async (src: string): Promise<string> => {
+      const hash = path.basename(src).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const dst = path.join(normDir, `norm_${hash}.jpg`);
+      if (fs.existsSync(dst) && fs.statSync(dst).size > 1000) return dst;
+      try {
+        await execAsync(`ffmpeg -i "${src}" -vf "scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,format=yuv420p" -frames:v 1 -y "${dst}"`);
+        return dst;
+      } catch (_) {
+        return src;
+      }
+    };
+
     if (validSceneVisuals.length > 0) {
-      await logToJob(jobId, `Creating high-speed slideshow manifest for ${validSceneVisuals.length} scenes...`);
+      await logToJob(jobId, `Normalizing ${validSceneVisuals.length} scene images to 1080x960...`);
       const lines: string[] = [];
-      validSceneVisuals.forEach((st: any) => {
+      const normalizedPaths: string[] = [];
+      for (const st of validSceneVisuals) {
+        const norm = await normalizeImage(st.visual.absPath);
+        normalizedPaths.push(norm);
         const d = Math.max(0.5, parseFloat((st.endT - st.startT).toFixed(2)));
-        lines.push(`file '${st.visual.absPath.replace(/'/g, "'\\''")}'`);
+        lines.push(`file '${norm.replace(/'/g, "'\\''")}'`);
         lines.push(`duration ${d}`);
-      });
+      }
       // FFmpeg concat demuxer requirement: repeat final image entry without duration
-      lines.push(`file '${validSceneVisuals[validSceneVisuals.length - 1].visual.absPath.replace(/'/g, "'\\''")}'`);
+      lines.push(`file '${normalizedPaths[normalizedPaths.length - 1].replace(/'/g, "'\\''")}'`);
       fs.writeFileSync(slideshowPath, lines.join('\n'));
       hasSlideshow = true;
     } else if (sortedVisuals.length > 0) {
-      await logToJob(jobId, `Creating slideshow manifest for ${sortedVisuals.length} visuals...`);
+      await logToJob(jobId, `Normalizing ${sortedVisuals.length} visuals to 1080x960...`);
       const durationPerVisual = Math.max(0.5, parseFloat((duration / sortedVisuals.length).toFixed(2)));
       const lines: string[] = [];
-      sortedVisuals.forEach((v) => {
-        lines.push(`file '${v.absPath.replace(/'/g, "'\\''")}'`);
+      const normalizedPaths: string[] = [];
+      for (const v of sortedVisuals) {
+        const norm = await normalizeImage(v.absPath);
+        normalizedPaths.push(norm);
+        lines.push(`file '${norm.replace(/'/g, "'\\''")}'`);
         lines.push(`duration ${durationPerVisual}`);
-      });
-      lines.push(`file '${sortedVisuals[sortedVisuals.length - 1].absPath.replace(/'/g, "'\\''")}'`);
+      }
+      lines.push(`file '${normalizedPaths[normalizedPaths.length - 1].replace(/'/g, "'\\''")}'`);
       fs.writeFileSync(slideshowPath, lines.join('\n'));
       hasSlideshow = true;
     }
 
-    // Top half input configuration
+    // Top half input configuration (already normalized to 1080x960)
     const topInputArg = hasSlideshow
       ? `-f concat -safe 0 -i "${slideshowPath}"`
       : `-f lavfi -i "color=c=0x1e1b4b:s=1080x960:d=${duration}"`;
-    const topFilter = hasSlideshow
-      ? `[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,fps=30[top]`
-      : `[0:v]setsar=1,fps=30[top]`;
+    const topFilter = `[0:v]setsar=1,fps=30[top]`;
 
     // Bottom half (gameplay) input configuration
     let bottomInputArg: string;
@@ -243,8 +263,8 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       bottomInputArg = `-stream_loop -1 -i "${gameplayPath}"`;
       bottomFilter = `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,fps=30[bottom]`;
     } else {
-      await logToJob(jobId, `Generating animated cosmic fractal for bottom gameplay split...`);
-      bottomInputArg = `-f lavfi -i "mandelbrot=s=1080x960:rate=30,format=yuv420p"`;
+      await logToJob(jobId, `Generating animated dynamic canvas for bottom gameplay split...`);
+      bottomInputArg = `-f lavfi -i "testsrc2=size=1080x960:rate=30"`;
       bottomFilter = `[1:v]setsar=1,fps=30[bottom]`;
     }
 
@@ -280,23 +300,25 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
           await logToJob(jobId, `Rendered 1080p split-screen video successfully!`);
         }
       } catch (noSubErr: any) {
-        await logToJob(jobId, `Secondary render warning (${noSubErr.stderr || noSubErr.message}). Invoking guaranteed emergency canvas render...`);
+        await logToJob(jobId, `Secondary render warning (${noSubErr.stderr || noSubErr.message}). Invoking gameplay fallback render...`);
       }
     }
 
-    // Tertiary emergency canvas fallback
+    // Tertiary emergency fallback: use gameplay footage or animated canvas instead of solid blank screen
     if (!renderedSuccess) {
-      const fallbackCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -i "${audioPath}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
+      const fallbackCmd = gameplayPath && fs.existsSync(gameplayPath)
+        ? `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`
+        : `ffmpeg -f lavfi -i "testsrc2=size=1080x1920:rate=30" -i "${audioPath}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
       try {
         await execAsync(fallbackCmd, { timeout: 60000, maxBuffer: 20 * 1024 * 1024 });
         renderedSuccess = true;
-        await logToJob(jobId, `Used emergency canvas fallback render.`);
+        await logToJob(jobId, `Used dynamic fallback render.`);
       } catch (finalErr: any) {
         console.error('Final fallback failed:', finalErr);
-        const guaranteedCmd = `ffmpeg -f lavfi -i "color=c=0x1e1b4b:s=1080x1920:d=${duration}" -f lavfi -i "sine=frequency=440:duration=${duration}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
+        const guaranteedCmd = `ffmpeg -f lavfi -i "testsrc2=size=1080x1920:rate=30" -f lavfi -i "sine=frequency=440:duration=${duration}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
         await execAsync(guaranteedCmd, { timeout: 60000 });
         renderedSuccess = true;
-        await logToJob(jobId, `Used guaranteed canvas render.`);
+        await logToJob(jobId, `Used guaranteed dynamic render.`);
       }
     }
 

@@ -43,7 +43,7 @@ export async function getOrCreateUser(sessionUser?: SessionUser | null) {
         email: userEmail || undefined,
         name: sessionUser.name || null,
         image: sessionUser.image || null,
-        credits: 0,
+        credits: 5,
       },
     });
     return newUser;

@@ -44,13 +44,18 @@ fi
 export DATABASE_URL="${DATABASE_URL:-file:/data/database/prod.db}"
 npx prisma db push
 
-# Ensure critical default settings exist in the database
+# Refresh font cache for FFmpeg libass subtitle burning
+fc-cache -f 2>/dev/null || true
+
+# Ensure critical default settings exist in the database and grant starter credits
 node -e "
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 async function init() {
   await prisma.setting.upsert({ where: { key: 'DAILY_VIDEO_LIMIT' }, update: { value: '50' }, create: { key: 'DAILY_VIDEO_LIMIT', value: '50' } });
   await prisma.setting.upsert({ where: { key: 'PROVIDER_MODE' }, update: {}, create: { key: 'PROVIDER_MODE', value: 'production' } });
+  const creditRes = await prisma.user.updateMany({ where: { credits: { lt: 5 } }, data: { credits: 10 } });
+  if (creditRes.count > 0) console.log('==> Granted starter credits to', creditRes.count, 'users');
   await prisma.\$disconnect();
 }
 init().catch(console.error);

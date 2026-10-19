@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim
 # Install OpenSSL (for Prisma), FFmpeg, and Python (needed by youtube-dl-exec)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openssl ffmpeg ca-certificates python3 python-is-python3 fonts-dejavu-core fontconfig && \
+    fc-cache -f && \
     rm -rf /var/lib/apt/lists/*
 
 # Skip python check if youtube-dl binary is bundled
