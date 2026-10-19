@@ -13,13 +13,22 @@ export async function uploadToYouTube(videoPath: string, title: string, descript
     throw new Error('YouTube credentials missing. Ensure YOUTUBE_CLIENT_ID (or GOOGLE_CLIENT_ID) and SECRET are configured in your environment.');
   }
 
-  const credential = await prisma.oAuthCredential.findUnique({
-    where: { userId_provider: { userId, provider: 'youtube' } }
-  });
+  let credential = userId 
+    ? await prisma.oAuthCredential.findUnique({ where: { userId_provider: { userId, provider: 'youtube' } } })
+    : null;
+
+  if (!credential) {
+    credential = await prisma.oAuthCredential.findFirst({
+      where: { provider: 'youtube' },
+      orderBy: { updatedAt: 'desc' }
+    });
+  }
 
   if (!credential || !credential.refreshToken) {
-    throw new Error('No YouTube account connected. Please connect your account in the Settings dashboard.');
+    throw new Error('No YouTube account connected. Please connect your YouTube account in the Settings or Providers dashboard.');
   }
+
+  const credentialId = credential.id;
 
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   // Passing both tokens allows the googleapis library to automatically refresh the access token if needed.
@@ -32,7 +41,7 @@ export async function uploadToYouTube(videoPath: string, title: string, descript
   oauth2Client.on('tokens', async (newTokens) => {
     try {
       await prisma.oAuthCredential.update({
-        where: { userId_provider: { userId, provider: 'youtube' } },
+        where: { id: credentialId },
         data: {
           accessToken: newTokens.access_token || undefined,
           refreshToken: newTokens.refresh_token || undefined,
