@@ -94,6 +94,11 @@ export async function uploadToYouTube(videoPath: string, title: string, descript
     if (err.message === 'invalid_grant' || err.response?.data?.error === 'invalid_grant') {
       throw new Error('YouTube authorization has expired or was revoked. Please go to Providers (/providers) and click "Reconnect" to refresh your YouTube channel link.');
     }
+    const apiError = err.response?.data?.error;
+    const errorMsg = apiError?.message || err.message || '';
+    if (errorMsg.includes('exceeded the number of videos') || apiError?.errors?.some((e: any) => e.reason === 'uploadLimitExceeded')) {
+      throw new Error('YouTube Daily Upload Limit: This YouTube channel has reached its daily API upload limit (usually restricted to 1-5 videos/day for new or unverified channels). You can verify your channel at youtube.com/verify or unlock Advanced Features in YouTube Studio (studio.youtube.com > Settings > Channel > Feature Eligibility), or download the MP4 below to upload manually.');
+    }
     throw err;
   }
 }

@@ -78,7 +78,11 @@ async function processNextJob() {
   } catch (error: any) {
     console.error(`[WORKER] ✗ Job failed: ${job.name} (ID: ${job.id})`, error.message);
 
-    if (job.attemptCount < MAX_ATTEMPTS) {
+    const isNonRetryable = error.message?.includes('uploadLimitExceeded') || 
+                           error.message?.includes('exceeded the number of videos') ||
+                           error.message?.includes('No YouTube account connected');
+
+    if (job.attemptCount < MAX_ATTEMPTS && !isNonRetryable) {
       // Retry: re-queue with backoff
       const backoffMs = job.attemptCount * 5000;
       await logToJob(job.id, `Failed (attempt ${job.attemptCount}/${MAX_ATTEMPTS}). Will retry in ${backoffMs / 1000}s: ${error.message}`);
@@ -91,17 +95,29 @@ async function processNextJob() {
         }
       });
     } else {
-      // Max attempts reached — mark permanently failed
-      await logToJob(job.id, `Permanently FAILED after ${MAX_ATTEMPTS} attempts: ${error.message}`);
+      // Max attempts reached or non-retryable — mark permanently failed
+      await logToJob(job.id, `Permanently FAILED: ${error.message}`);
       await markJobFailed(job.id, error);
 
-      // If publish failed, return video to READY_FOR_APPROVAL so user can reconnect and retry
+      // If publish failed, return video to READY_FOR_APPROVAL and record error in approval.feedback
       if (job.name === 'PUBLISH_VIDEO') {
         const payload = job.data ? JSON.parse(job.data) : {};
         if (payload.videoId) {
           await prisma.video.update({
             where: { id: payload.videoId },
             data: { status: 'READY_FOR_APPROVAL' }
+          });
+          await prisma.approval.upsert({
+            where: { videoId: payload.videoId },
+            update: {
+              status: 'PENDING',
+              feedback: error.message
+            },
+            create: {
+              videoId: payload.videoId,
+              status: 'PENDING',
+              feedback: error.message
+            }
           });
         }
       }

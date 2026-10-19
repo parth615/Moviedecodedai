@@ -10,13 +10,15 @@ export async function approveVideo(videoId: string) {
     update: {
       status: 'APPROVED',
       reviewer: 'Admin',
-      approvedAt: new Date()
+      approvedAt: new Date(),
+      feedback: null
     },
     create: {
       videoId,
       status: 'APPROVED',
       reviewer: 'Admin',
-      approvedAt: new Date()
+      approvedAt: new Date(),
+      feedback: null
     }
   });
 
@@ -34,6 +36,14 @@ export async function approveVideo(videoId: string) {
     await enqueueJob('PUBLISH_VIDEO', { videoId });
   }
 
+  revalidatePath('/approval');
+}
+
+export async function resetVideoToReady(videoId: string) {
+  await prisma.video.update({
+    where: { id: videoId },
+    data: { status: 'READY_FOR_APPROVAL' }
+  });
   revalidatePath('/approval');
 }
 
