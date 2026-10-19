@@ -18,9 +18,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/providers?error=missing_code', req.url));
   }
 
-  const clientId = process.env.YOUTUBE_CLIENT_ID;
-  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/api/auth/youtube/callback';
+  const clientId = process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const baseUrl = process.env.NEXTAUTH_URL || new URL(req.url).origin;
+  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || `${baseUrl.replace(/\/$/, '')}/api/auth/youtube/callback`;
 
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(new URL('/providers?error=missing_credentials', req.url));
@@ -36,12 +37,20 @@ export async function GET(req: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // Fetch user profile info just to get a name for the UI
-    const oauth2 = google.oauth2({
-      auth: oauth2Client,
-      version: 'v2'
-    });
-    const userInfo = await oauth2.userinfo.get();
+    // Fetch user profile info if available
+    let accountName = 'YouTube Channel';
+    let accountEmail: string | undefined = undefined;
+    try {
+      const oauth2 = google.oauth2({
+        auth: oauth2Client,
+        version: 'v2'
+      });
+      const userInfo = await oauth2.userinfo.get();
+      if (userInfo.data.name) accountName = userInfo.data.name;
+      if (userInfo.data.email) accountEmail = userInfo.data.email;
+    } catch (e) {
+      console.warn('Could not retrieve user info profile for YouTube connection:', e);
+    }
     
     await prisma.oAuthCredential.upsert({
       where: { userId_provider: { userId, provider: 'youtube' } },
@@ -50,7 +59,7 @@ export async function GET(req: NextRequest) {
         refreshToken: tokens.refresh_token || undefined,
         expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
         scopes: tokens.scope,
-        accountInfo: JSON.stringify({ name: userInfo.data.name || 'YouTube Account', email: userInfo.data.email })
+        accountInfo: JSON.stringify({ name: accountName, email: accountEmail })
       },
       create: {
         userId,
@@ -59,7 +68,7 @@ export async function GET(req: NextRequest) {
         refreshToken: tokens.refresh_token || null,
         expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
         scopes: tokens.scope,
-        accountInfo: JSON.stringify({ name: userInfo.data.name || 'YouTube Account', email: userInfo.data.email })
+        accountInfo: JSON.stringify({ name: accountName, email: accountEmail })
       }
     });
 

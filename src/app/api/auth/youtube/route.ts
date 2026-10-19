@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 
-export async function GET() {
-  const clientId = process.env.YOUTUBE_CLIENT_ID;
-  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/api/auth/youtube/callback';
+export async function GET(req: Request) {
+  const clientId = process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const baseUrl = process.env.NEXTAUTH_URL || new URL(req.url).origin;
+  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || `${baseUrl.replace(/\/$/, '')}/api/auth/youtube/callback`;
 
   if (!clientId || !clientSecret) {
     return NextResponse.json({ error: 'Missing YouTube OAuth credentials in .env' }, { status: 400 });
@@ -18,6 +19,7 @@ export async function GET() {
 
   const scopes = [
     'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.readonly',
     'https://www.googleapis.com/auth/userinfo.profile'
   ];
 

@@ -4,12 +4,13 @@ import path from 'path';
 import { prisma } from '../prisma';
 
 export async function uploadToYouTube(videoPath: string, title: string, description: string, tags: string[], userId: string): Promise<string> {
-  const clientId = process.env.YOUTUBE_CLIENT_ID;
-  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/api/auth/youtube/callback';
+  const clientId = process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || `${baseUrl.replace(/\/$/, '')}/api/auth/youtube/callback`;
 
   if (!clientId || !clientSecret) {
-    throw new Error('YouTube credentials missing. Ensure YOUTUBE_CLIENT_ID and SECRET are set in .env.');
+    throw new Error('YouTube credentials missing. Ensure YOUTUBE_CLIENT_ID (or GOOGLE_CLIENT_ID) and SECRET are configured in your environment.');
   }
 
   const credential = await prisma.oAuthCredential.findUnique({
@@ -26,6 +27,21 @@ export async function uploadToYouTube(videoPath: string, title: string, descript
     access_token: credential.accessToken,
     refresh_token: credential.refreshToken,
     expiry_date: credential.expiresAt ? credential.expiresAt.getTime() : null
+  });
+
+  oauth2Client.on('tokens', async (newTokens) => {
+    try {
+      await prisma.oAuthCredential.update({
+        where: { userId_provider: { userId, provider: 'youtube' } },
+        data: {
+          accessToken: newTokens.access_token || undefined,
+          refreshToken: newTokens.refresh_token || undefined,
+          expiresAt: newTokens.expiry_date ? new Date(newTokens.expiry_date) : undefined
+        }
+      });
+    } catch (e) {
+      console.warn('Could not persist refreshed YouTube token:', e);
+    }
   });
 
   const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
