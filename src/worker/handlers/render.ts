@@ -40,14 +40,14 @@ function generateAssSubtitles(subtitles: { word: string; start: number; end: num
   let ass = `[Script Info]
 Title: Generated Subtitles
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: 720
+PlayResY: 1280
 WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,DejaVu Sans,85,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,5,40,40,0,1
-Style: Highlight,DejaVu Sans,95,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,4,5,40,40,0,1
+Style: Default,DejaVu Sans,55,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,5,30,30,0,1
+Style: Highlight,DejaVu Sans,62,&H0014FF39,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,3,5,30,30,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -77,7 +77,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       // Build the line with the current word highlighted
       const lineText = chunk.map((w, k) => {
         if (k === j) {
-          return `{\\c&H0014FF39&\\fs100\\b1}${w.word.toUpperCase()}{\\r}`;
+          return `{\\c&H0014FF39&\\fs65\\b1}${w.word.toUpperCase()}{\\r}`;
         }
         return w.word.toUpperCase();
       }).join(' ');
@@ -201,7 +201,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     const validSceneVisuals = sceneTimings.filter((st: any) => st.visual && fs.existsSync(st.visual.absPath));
     let hasSlideshow = false;
 
-    // Helper: normalize image to exactly 1080x960 yuv420p so FFmpeg concat demuxer NEVER chokes on dimension/format changes
+    // Helper: normalize image to exactly 720x640 yuv420p so FFmpeg concat demuxer NEVER chokes on dimension/format changes
     const normDir = path.join(process.cwd(), 'public', 'video', 'norm');
     fs.mkdirSync(normDir, { recursive: true });
 
@@ -210,7 +210,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       const dst = path.join(normDir, `norm_${hash}.jpg`);
       if (fs.existsSync(dst) && fs.statSync(dst).size > 1000) return dst;
       try {
-        await execAsync(`ffmpeg -i "${src}" -vf "scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,format=yuv420p" -frames:v 1 -y "${dst}"`);
+        await execAsync(`ffmpeg -i "${src}" -vf "scale=720:640:force_original_aspect_ratio=increase,crop=720:640,format=yuv420p" -frames:v 1 -y "${dst}"`);
         return dst;
       } catch (_) {
         return src;
@@ -218,7 +218,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     };
 
     if (validSceneVisuals.length > 0) {
-      await logToJob(jobId, `Normalizing ${validSceneVisuals.length} scene images to 1080x960...`);
+      await logToJob(jobId, `Normalizing ${validSceneVisuals.length} scene images to 720x640...`);
       const lines: string[] = [];
       const normalizedPaths: string[] = [];
       for (const st of validSceneVisuals) {
@@ -233,7 +233,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       fs.writeFileSync(slideshowPath, lines.join('\n'));
       hasSlideshow = true;
     } else if (sortedVisuals.length > 0) {
-      await logToJob(jobId, `Normalizing ${sortedVisuals.length} visuals to 1080x960...`);
+      await logToJob(jobId, `Normalizing ${sortedVisuals.length} visuals to 720x640...`);
       const durationPerVisual = Math.max(0.5, parseFloat((duration / sortedVisuals.length).toFixed(2)));
       const lines: string[] = [];
       const normalizedPaths: string[] = [];
@@ -248,11 +248,11 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       hasSlideshow = true;
     }
 
-    // Top half input configuration (already normalized to 1080x960)
+    // Top half input configuration (already normalized to 720x640)
     const topInputArg = hasSlideshow
       ? `-f concat -safe 0 -i "${slideshowPath}"`
-      : `-f lavfi -i "color=c=0x1e1b4b:s=1080x960:d=${duration}"`;
-    const topFilter = `[0:v]setsar=1,fps=30[top]`;
+      : `-f lavfi -i "color=c=0x1e1b4b:s=720x640:d=${duration}"`;
+    const topFilter = `[0:v]setsar=1,fps=24[top]`;
 
     // Bottom half (gameplay) input configuration
     let bottomInputArg: string;
@@ -261,11 +261,11 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     if (gameplayPath && fs.existsSync(gameplayPath) && !gameplayPath.startsWith('gradients=')) {
       await logToJob(jobId, `Using gameplay footage: ${path.basename(gameplayPath)}`);
       bottomInputArg = `-stream_loop -1 -i "${gameplayPath}"`;
-      bottomFilter = `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,setsar=1,fps=30[bottom]`;
+      bottomFilter = `[1:v]scale=720:640:force_original_aspect_ratio=increase,crop=720:640,setsar=1,fps=24[bottom]`;
     } else {
       await logToJob(jobId, `Generating animated dynamic canvas for bottom gameplay split...`);
-      bottomInputArg = `-f lavfi -i "testsrc2=size=1080x960:rate=30"`;
-      bottomFilter = `[1:v]setsar=1,fps=30[bottom]`;
+      bottomInputArg = `-f lavfi -i "testsrc2=size=720x640:rate=24:d=${duration}"`;
+      bottomFilter = `[1:v]setsar=1,fps=24[bottom]`;
     }
 
     const baseFilter = `${topFilter};${bottomFilter};[top][bottom]vstack[v]`;
@@ -275,14 +275,14 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     if (assContent && fs.existsSync(assPath)) {
       const escapedAssPath = assPath.replace(/:/g, '\\:').replace(/\\/g, '\\\\');
       const filterWithSubs = `${baseFilter};[v]ass='${escapedAssPath}'[final]`;
-      const cmdWithSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${filterWithSubs}" -map "[final]" -map 2:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
+      const cmdWithSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${filterWithSubs}" -map "[final]" -map 2:a -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
 
       try {
         await logToJob(jobId, `Running FFmpeg ultra-fast split-screen render (with subtitles)...`);
-        await execAsync(cmdWithSubs, { timeout: 120000, maxBuffer: 50 * 1024 * 1024 });
+        await execAsync(cmdWithSubs, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
         if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1000) {
           renderedSuccess = true;
-          await logToJob(jobId, `Rendered 1080p split-screen with kinetic captions!`);
+          await logToJob(jobId, `Rendered 720p split-screen with kinetic captions!`);
         }
       } catch (subErr: any) {
         await logToJob(jobId, `Subtitle render warning (${subErr.stderr || subErr.message}). Rendering split-screen without subtitles...`);
@@ -291,13 +291,13 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
 
     // Secondary render without subtitles if primary failed or had no subtitles
     if (!renderedSuccess) {
-      const cmdNoSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${baseFilter}" -map "[v]" -map 2:a -c:v libx264 -preset ultrafast -threads 2 -crf 26 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
+      const cmdNoSubs = `ffmpeg ${topInputArg} ${bottomInputArg} -i "${audioPath}" -filter_complex "${baseFilter}" -map "[v]" -map 2:a -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k -shortest -y "${outPath}"`;
       try {
         await logToJob(jobId, `Running FFmpeg split-screen render...`);
-        await execAsync(cmdNoSubs, { timeout: 120000, maxBuffer: 50 * 1024 * 1024 });
+        await execAsync(cmdNoSubs, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
         if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1000) {
           renderedSuccess = true;
-          await logToJob(jobId, `Rendered 1080p split-screen video successfully!`);
+          await logToJob(jobId, `Rendered 720p split-screen video successfully!`);
         }
       } catch (noSubErr: any) {
         await logToJob(jobId, `Secondary render warning (${noSubErr.stderr || noSubErr.message}). Invoking gameplay fallback render...`);
@@ -307,16 +307,16 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     // Tertiary emergency fallback: use gameplay footage or animated canvas instead of solid blank screen
     if (!renderedSuccess) {
       const fallbackCmd = gameplayPath && fs.existsSync(gameplayPath)
-        ? `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`
-        : `ffmpeg -f lavfi -i "testsrc2=size=1080x1920:rate=30" -i "${audioPath}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
+        ? `ffmpeg -stream_loop -1 -i "${gameplayPath}" -i "${audioPath}" -vf "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -shortest -y "${outPath}"`
+        : `ffmpeg -f lavfi -i "testsrc2=size=720x1280:rate=24:d=${duration}" -i "${audioPath}" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -shortest -y "${outPath}"`;
       try {
-        await execAsync(fallbackCmd, { timeout: 60000, maxBuffer: 20 * 1024 * 1024 });
+        await execAsync(fallbackCmd, { timeout: 180000, maxBuffer: 20 * 1024 * 1024 });
         renderedSuccess = true;
         await logToJob(jobId, `Used dynamic fallback render.`);
       } catch (finalErr: any) {
         console.error('Final fallback failed:', finalErr);
-        const guaranteedCmd = `ffmpeg -f lavfi -i "testsrc2=size=1080x1920:rate=30" -f lavfi -i "sine=frequency=440:duration=${duration}" -c:v libx264 -preset ultrafast -threads 2 -c:a aac -shortest -y "${outPath}"`;
-        await execAsync(guaranteedCmd, { timeout: 60000 });
+        const guaranteedCmd = `ffmpeg -f lavfi -i "testsrc2=size=720x1280:rate=24:d=${duration}" -f lavfi -i "sine=frequency=440:duration=${duration}" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -shortest -y "${outPath}"`;
+        await execAsync(guaranteedCmd, { timeout: 120000 });
         renderedSuccess = true;
         await logToJob(jobId, `Used guaranteed dynamic render.`);
       }
@@ -339,7 +339,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
     update: {
       fileUrl: `/video/${filename}`,
       duration,
-      resolution: '1080x1920',
+      resolution: '720x1280',
       status: 'READY_FOR_APPROVAL',
       qaScore: 95
     },
@@ -347,7 +347,7 @@ export async function handleRenderVideo(data: { scriptId: string }, jobId: strin
       scriptId,
       fileUrl: `/video/${filename}`,
       duration,
-      resolution: '1080x1920',
+      resolution: '720x1280',
       status: 'READY_FOR_APPROVAL',
       qaScore: 95
     }
