@@ -21,12 +21,18 @@ export async function GET(request: Request) {
 
     // ── Diagnostic Action: Trigger demo pipeline ─────────────────
     if (action === 'trigger_demo') {
-      const firstUser = await prisma.user.findFirst();
-      if (!firstUser) {
-        return NextResponse.json({ error: 'No user exists in DB to attach topic to' }, { status: 400 });
+      let user = await prisma.user.findFirst();
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: 'khannaparth721@gmail.com',
+            name: 'Parth Khanna',
+            credits: 25,
+          }
+        });
       }
-      const job = await enqueueJob('GENERATE_TOPICS', { userId: firstUser.id, count: 1 });
-      return NextResponse.json({ success: true, message: 'Enqueued GENERATE_TOPICS', jobId: job.id, userId: firstUser.id });
+      const job = await enqueueJob('GENERATE_TOPICS', { userId: user.id, count: 1 });
+      return NextResponse.json({ success: true, message: 'Enqueued GENERATE_TOPICS', jobId: job.id, userId: user.id });
     }
 
     const dbUrl = process.env.DATABASE_URL || 'not_set';
