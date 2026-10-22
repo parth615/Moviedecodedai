@@ -45,6 +45,7 @@ export default async function PublishedPage() {
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Platform</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Published At</th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-slate-900">
@@ -68,11 +69,25 @@ export default async function PublishedPage() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                   {pub.publishedAt?.toLocaleDateString() || 'N/A'}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                  {pub.platform === 'YOUTUBE_SHORTS' && pub.externalId && !pub.externalId.startsWith('mock') ? (
+                    <a
+                      href={`https://youtube.com/shorts/${pub.externalId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-semibold border border-red-500/30 transition"
+                    >
+                      View on YouTube <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-xs text-slate-500">Live</span>
+                  )}
+                </td>
               </tr>
             ))}
             {publications.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                   No published videos yet. Approve some videos first!
                 </td>
               </tr>

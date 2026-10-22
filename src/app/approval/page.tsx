@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { approveVideo, rejectVideo, regenerateVideo, updateVideoSettings, resetVideoToReady } from './actions';
 import { Check, X, RefreshCw, Edit, Mic, Image as ImageIcon, Settings2, Subtitles, AlertCircle, AlertTriangle, ExternalLink, Download } from 'lucide-react';
 import { VideoPreview } from './VideoPreview';
+import { PublishingPoller } from './PublishingPoller';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,19 +64,15 @@ export default async function ApprovalPage() {
 
         <div className="lg:col-span-2 space-y-6">
           {video.status === 'APPROVED' && (
-            <div className="bg-blue-950/40 border border-blue-500/40 rounded-xl p-4 flex items-center justify-between text-blue-200">
-              <div className="flex items-center gap-3">
-                <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
-                <div>
-                  <p className="text-sm font-semibold">Publishing Video in Background</p>
-                  <p className="text-xs text-blue-300/80">Worker is uploading to YouTube Shorts & Instagram Reels. Please wait a moment.</p>
-                </div>
+            <div className="space-y-2">
+              <PublishingPoller videoId={video.id} initialStatus={video.status} />
+              <div className="flex justify-end">
+                <form action={resetVideoToReady.bind(null, video.id)}>
+                  <button type="submit" className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+                    Force Reset to Ready
+                  </button>
+                </form>
               </div>
-              <form action={resetVideoToReady.bind(null, video.id)}>
-                <button type="submit" className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">
-                  Reset
-                </button>
-              </form>
             </div>
           )}
 
