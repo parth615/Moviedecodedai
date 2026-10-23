@@ -31,7 +31,28 @@ export async function handlePublishVideo(data: { videoId: string }, jobId: strin
   let ytExternalId = `mock_yt_${Date.now()}`;
   let metaExternalId = `mock_meta_${Date.now()}`;
 
-  if (providerMode === 'production') {
+  // Check if a video with the exact same topic title has already been published to YouTube Shorts
+  const existingPublished = await prisma.publication.findFirst({
+    where: {
+      platform: 'YOUTUBE_SHORTS',
+      status: 'PUBLISHED',
+      video: {
+        id: { not: videoId },
+        script: {
+          topic: {
+            title: {
+              equals: video.script.topic.title
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (existingPublished) {
+    await logToJob(jobId, `A video for topic "${video.script.topic.title}" was already published on YouTube (ID: ${existingPublished.externalId}). Skipping duplicate YouTube upload to avoid repeating content on the channel.`);
+    ytExternalId = existingPublished.externalId || ytExternalId;
+  } else if (providerMode === 'production') {
     try {
       await logToJob(jobId, `Attempting real YouTube upload...`);
       ytExternalId = await uploadToYouTube(

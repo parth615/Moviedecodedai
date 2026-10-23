@@ -78,6 +78,18 @@ export async function handleGenerateTopics(data: any, jobId: string) {
 
   await logToJob(jobId, `Category mix requested: ${finalCategories.join(', ')}`);
 
+  // Fetch recent topics across the database to supply an explicit negative list to LLM
+  const pastTopics = await prisma.topic.findMany({
+    select: { title: true },
+    orderBy: { createdAt: 'desc' },
+    take: 80
+  });
+
+  const excludedList = pastTopics
+    .map(t => `- "${t.title}"`)
+    .slice(0, 60)
+    .join('\n');
+
   const systemPrompt = `You are a viral content strategist for a short-form video channel targeting ${country === 'IN' ? 'Indian' : 'global'} audiences on YouTube Shorts, Instagram Reels, and TikTok.
 
 Generate engaging, highly viral topic ideas focused exclusively on CRAZY FUN FACTS, mysterious historical events, bizarre science, and unbelievable true stories. Do NOT generate topics about movies, Hollywood, or Bollywood.
@@ -94,7 +106,11 @@ Rules:
 
   const userPrompt = `Generate ${countToGenerate} viral short-form video topic(s) covering these categories: ${finalCategories.join(', ')}.
 
-Each topic must be genuinely interesting, captivating, and high-retention. No duplicates, no generic ideas.`;
+CRITICAL DIVERSITY REQUIREMENT — DO NOT REPEAT PREVIOUS TOPICS:
+We have ALREADY created videos on all the following topics. You MUST NOT generate any topic about these subjects or anything remotely similar to them:
+${excludedList || '(None yet)'}
+
+Every generated topic must be 100% FRESH, UNIQUE, UNEXPECTED, and NEVER COVERED BEFORE. Explore new historical curiosities, weird biology, psychological anomalies, or bizarre true incidents that are completely distinct from the list above.`;
 
   const response = await generateStructuredLLM(systemPrompt, userPrompt, TopicsSchema, 'topics');
 
@@ -102,9 +118,9 @@ Each topic must be genuinely interesting, captivating, and high-retention. No du
 
   let created = 0;
   for (const t of response.topics) {
-    const { isTooSimilar, maxScore } = await checkTopicSimilarity(t.title, t.hook, data.userId || null);
+    const { isTooSimilar, maxScore, matchedTitle } = await checkTopicSimilarity(t.title, t.hook, data.userId || null);
     if (isTooSimilar) {
-      await logToJob(jobId, `Skipped "${t.title}" — too similar to existing topic (${maxScore}% match).`);
+      await logToJob(jobId, `Skipped "${t.title}" — too similar to "${matchedTitle}" (${maxScore}% match).`);
       continue;
     }
 
