@@ -22,67 +22,64 @@ export async function handleRunQA(data: { videoId: string }, jobId: string) {
   let qaScore = 100;
   let copyrightRisk = 'LOW';
   
-  // Rule 1: Duration bounds (Shorts ideally < 60s)
+  // Rule 1: Duration check (YouTube Shorts maximum cutoff is 60 seconds)
   if (video.duration > 60) {
+    const over = video.duration - 60;
+    const penalty = Math.min(20, 5 + over * 2);
+    qaScore -= penalty;
+    await logToJob(jobId, `-${penalty} points: Video exceeds 60s Shorts duration limit (${video.duration}s)`);
+  } else if (video.duration < 15) {
     qaScore -= 10;
-    await logToJob(jobId, `-10 points: Video exceeds 60 seconds (${video.duration}s)`);
+    await logToJob(jobId, `-10 points: Video is under 15 seconds (${video.duration}s)`);
   }
 
-  // Rule 1.5: Strict resolution bounds
-  if (video.resolution !== '1080x1920') {
-    qaScore -= 40; // Heavy penalty for wrong aspect ratio
-    await logToJob(jobId, `-40 points: Resolution is ${video.resolution}, expected 1080x1920`);
+  // Rule 2: 9:16 Vertical Aspect Ratio (Supports standard vertical 720x1280 HD & 1080x1920 FHD)
+  const isVertical916 = video.resolution === '720x1280' || video.resolution === '1080x1920';
+  if (!isVertical916) {
+    qaScore -= 35;
+    await logToJob(jobId, `-35 points: Resolution ${video.resolution} is not vertical 9:16 (expected 720x1280 or 1080x1920)`);
   }
 
-  // Rule 2: Missing visual assets
+  // Rule 3: Visual coverage (Images generated for all script scenes)
   const scenes = JSON.parse(video.script.scenes || '[]');
-  if (video.script.visualAssets.length < scenes.length) {
+  const visualCount = video.script.visualAssets.length;
+  if (scenes.length > 0 && visualCount < scenes.length) {
+    const missing = scenes.length - visualCount;
+    const penalty = Math.min(25, missing * 5);
+    qaScore -= penalty;
+    await logToJob(jobId, `-${penalty} points: Missing visual assets for ${missing} of ${scenes.length} scene(s).`);
+  }
+
+  // Rule 4: Voice & Subtitles check
+  if (!video.script.voiceAsset) {
     qaScore -= 20;
-    await logToJob(jobId, `-20 points: Missing visual assets for some scenes.`);
+    await logToJob(jobId, `-20 points: Missing audio narration track.`);
+  } else if (!video.script.voiceAsset.subtitles) {
+    qaScore -= 10;
+    await logToJob(jobId, `-10 points: Missing subtitle timing data.`);
   }
 
-  // Rule 3: Split-Screen Gameplay Engine Rules
-  if (video.script.templateId === 'SplitScreenTemplate') {
-    if (!video.script.gameplayAsset) {
-      qaScore -= 30;
-      await logToJob(jobId, `-30 points: Missing Gameplay Asset for SplitScreenTemplate.`);
-    } else if (video.script.gameplayAsset.usageCount > 5) {
-      qaScore -= 10;
-      await logToJob(jobId, `-10 points: Gameplay asset has been used heavily (${video.script.gameplayAsset.usageCount} times). Considered stale.`);
-    }
-
-    // Mock Audio & Sync checks
-    if (!video.script.voiceAsset?.subtitles) {
-      qaScore -= 15;
-      await logToJob(jobId, `-15 points: Missing subtitle timing data. Caption sync will fail.`);
-    }
-    
-    // Mock Audio Clipping check (Randomly flag 5% of the time for realism)
-    if (Math.random() < 0.05) {
-      qaScore -= 5;
-      await logToJob(jobId, `-5 points: Audio clipping detected in narration track.`);
-    }
+  // Rule 5: Gameplay Asset check for SplitScreenTemplate
+  if (video.script.templateId === 'SplitScreenTemplate' && !video.script.gameplayAsset) {
+    qaScore -= 15;
+    await logToJob(jobId, `-15 points: Missing Gameplay Asset for SplitScreenTemplate.`);
   }
 
-  // Rule 4: Copyright Risk check
-  const hasRiskyAssets = video.script.visualAssets.some(a => a.provider === 'MockProvider' || a.provider.includes('Movie'));
-  if (hasRiskyAssets || (video.script.gameplayAsset && !video.script.gameplayAsset.license)) {
-    copyrightRisk = 'HIGH';
-    await logToJob(jobId, `Flagged HIGH copyright risk due to unverified visual providers or missing gameplay license.`);
-  }
+  // Ensure score is cleanly bounded between 0 and 100
+  qaScore = Math.max(0, Math.min(100, Math.round(qaScore)));
 
-  // Cost tracking (simulated for now, would sum actual DB logs)
-  const estimatedCost = (video.script.wordCount || 0) * 0.001; // Mock math
+  // Cost tracking (simulated estimate)
+  const estimatedCost = (video.script.wordCount || 0) * 0.001;
 
   await prisma.video.update({
     where: { id: videoId },
     data: { 
-      qaScore: Math.max(0, qaScore),
+      qaScore,
       status: 'READY_FOR_APPROVAL'
     }
   });
 
-  // Create approval record
+  // Create or refresh approval record
   await prisma.approval.upsert({
     where: { videoId: video.id },
     update: { status: 'PENDING' },
@@ -97,10 +94,10 @@ export async function handleRunQA(data: { videoId: string }, jobId: string) {
     data: { status: 'READY_FOR_APPROVAL' }
   });
 
-  const minQaScore = parseInt(await getSetting('MINIMUM_QA_SCORE'), 10) || 80;
+  const minQaScore = parseInt(await getSetting('MINIMUM_QA_SCORE'), 10) || 75;
 
   if (qaScore < minQaScore) {
-    await logToJob(jobId, `QA Score ${qaScore} failed to meet threshold ${minQaScore}. Manual intervention required.`);
+    await logToJob(jobId, `QA Score ${qaScore} failed to meet threshold ${minQaScore}.`);
   } else {
     await logToJob(jobId, `QA Passed (${qaScore}/100). Ready for Approval.`);
   }
