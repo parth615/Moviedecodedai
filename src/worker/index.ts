@@ -119,6 +119,19 @@ async function processNextJob() {
               feedback: error.message
             }
           });
+
+          // Safely pause Auto-Pilot if publishing failed
+          try {
+            const apStatus = await getSetting('AUTOPILOT_STATUS');
+            if (apStatus === 'active') {
+              await prisma.setting.upsert({
+                where: { key: 'AUTOPILOT_STATUS' },
+                update: { value: 'paused' },
+                create: { key: 'AUTOPILOT_STATUS', value: 'paused' }
+              });
+              await logToJob(job.id, `[AUTOPILOT] Paused Auto-Pilot sequence due to publishing error: ${error.message}`);
+            }
+          } catch (_) {}
         }
       }
     }

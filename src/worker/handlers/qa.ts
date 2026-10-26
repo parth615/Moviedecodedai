@@ -97,9 +97,49 @@ export async function handleRunQA(data: { videoId: string }, jobId: string) {
   const minQaScore = parseInt(await getSetting('MINIMUM_QA_SCORE'), 10) || 75;
 
   if (qaScore < minQaScore) {
-    await logToJob(jobId, `QA Score ${qaScore} failed to meet threshold ${minQaScore}.`);
+    await logToJob(jobId, `QA Score ${qaScore} failed to meet threshold ${minQaScore}. Requires manual review.`);
   } else {
     await logToJob(jobId, `QA Passed (${qaScore}/100). Ready for Approval.`);
+
+    // ── Auto-Publish / Auto-Pilot Trigger ──────────────────────────────────────
+    const [autoPublish, autopilotStatus] = await Promise.all([
+      getSetting('AUTO_PUBLISH'),
+      getSetting('AUTOPILOT_STATUS')
+    ]);
+
+    if (autoPublish === 'true' || autopilotStatus === 'active') {
+      await logToJob(jobId, `[AUTONOMOUS ENGINE] Auto-Publish/Auto-Pilot active. Auto-approving video and enqueuing PUBLISH_VIDEO...`);
+
+      await prisma.approval.upsert({
+        where: { videoId: video.id },
+        update: {
+          status: 'APPROVED',
+          reviewer: 'AutoPilot',
+          approvedAt: new Date(),
+          feedback: null
+        },
+        create: {
+          videoId: video.id,
+          status: 'APPROVED',
+          reviewer: 'AutoPilot',
+          approvedAt: new Date(),
+          feedback: null
+        }
+      });
+
+      await prisma.video.update({
+        where: { id: video.id },
+        data: { status: 'APPROVED' }
+      });
+
+      await prisma.script.update({
+        where: { id: video.scriptId },
+        data: { status: 'READY_FOR_PUBLISHING' }
+      });
+
+      await enqueueJob('PUBLISH_VIDEO', { videoId: video.id });
+      await logToJob(jobId, `✓ Video automatically approved and sent to YouTube Shorts publisher!`);
+    }
   }
 
   // Alert via Telegram

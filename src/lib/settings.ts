@@ -19,6 +19,11 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   AUDIO_MUSIC_VOLUME: '0.3',
   AUDIO_DUCK_MUSIC: 'true',
   GEMINI_API_KEY: '',
+  AUTO_PUBLISH: 'false',
+  AUTOPILOT_STATUS: 'idle', // 'idle' | 'active' | 'paused'
+  AUTOPILOT_USER_ID: '',
+  AUTOPILOT_REMAINING: '0',
+  AUTOPILOT_TOTAL: '0',
   // Content category weights (must sum to 10)
   CONTENT_MIX: JSON.stringify({
     trending: 3,

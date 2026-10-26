@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma';
-import { logToJob } from '../../lib/queue';
+import { logToJob, enqueueJob } from '../../lib/queue';
 import { getSetting } from '../../lib/settings';
 import { uploadToYouTube } from '../../lib/providers/youtube';
 import path from 'path';
@@ -94,4 +94,59 @@ export async function handlePublishVideo(data: { videoId: string }, jobId: strin
   });
 
   await logToJob(jobId, `Video successfully published across platforms.`);
+
+  // ── Auto-Pilot Loop Progression ──────────────────────────────────────────
+  try {
+    const autopilotStatus = await getSetting('AUTOPILOT_STATUS');
+    if (autopilotStatus === 'active') {
+      const remainingStr = await getSetting('AUTOPILOT_REMAINING');
+      let remaining = parseInt(remainingStr, 10);
+      const userId = (await getSetting('AUTOPILOT_USER_ID')) || video.script.topic.userId;
+
+      if (userId) {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        const hasCredits = user && user.credits > 0;
+
+        // remaining = -1 means "run until credits are exhausted"
+        // remaining > 1 means specific batch (e.g. 8 videos)
+        const shouldContinue = Boolean(hasCredits && (remaining === -1 || remaining > 1));
+
+        if (shouldContinue && user) {
+          const nextRemaining = remaining === -1 ? -1 : remaining - 1;
+          await prisma.setting.upsert({
+            where: { key: 'AUTOPILOT_REMAINING' },
+            update: { value: nextRemaining.toString() },
+            create: { key: 'AUTOPILOT_REMAINING', value: nextRemaining.toString() }
+          });
+
+          // Deduct 1 credit for the next video
+          await prisma.user.update({
+            where: { id: userId },
+            data: { credits: { decrement: 1 } }
+          });
+
+          const remainingMsg = nextRemaining === -1 
+            ? `running continuously until credits end (${user.credits - 1} credits left)`
+            : `${nextRemaining} video(s) remaining in batch`;
+
+          await logToJob(jobId, `[AUTOPILOT] Triggering next video (${remainingMsg})...`);
+          await enqueueJob('GENERATE_TOPICS', { userId, count: 1 });
+        } else {
+          await prisma.setting.upsert({
+            where: { key: 'AUTOPILOT_STATUS' },
+            update: { value: 'idle' },
+            create: { key: 'AUTOPILOT_STATUS', value: 'idle' }
+          });
+          await prisma.setting.upsert({
+            where: { key: 'AUTOPILOT_REMAINING' },
+            update: { value: '0' },
+            create: { key: 'AUTOPILOT_REMAINING', value: '0' }
+          });
+          await logToJob(jobId, `[AUTOPILOT] ✓ Auto-Pilot sequence completed! Batch target reached or credits exhausted.`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('[AUTOPILOT] Error advancing Auto-Pilot loop:', err.message);
+  }
 }

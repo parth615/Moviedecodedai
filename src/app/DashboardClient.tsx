@@ -13,7 +13,11 @@ import {
   Sparkles,
   Gift,
   Check,
-  Radio
+  Radio,
+  Bot,
+  Rocket,
+  RefreshCw,
+  Power
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { UpiPaymentModal } from '@/components/UpiPaymentModal';
@@ -73,6 +77,22 @@ export function DashboardClient({ stats, isPaused }: {
     videoUrl: '',
   });
 
+  // Auto-Pilot Autonomous Engine State
+  const [autopilotState, setAutopilotState] = useState<{
+    status: 'idle' | 'active' | 'paused';
+    remaining: number;
+    total: number;
+    autoPublish: boolean;
+  }>({
+    status: 'idle',
+    remaining: 0,
+    total: 0,
+    autoPublish: false,
+  });
+  const [autopilotMode, setAutopilotMode] = useState<'8' | 'unlimited' | 'custom'>('8');
+  const [customBatchCount, setCustomBatchCount] = useState<number>(8);
+  const [isStartingAutopilot, setIsStartingAutopilot] = useState(false);
+
   // Check URL query param for ?token= or ?redeem=
   useEffect(() => {
     const queryToken = searchParams?.get('token') || searchParams?.get('redeem');
@@ -115,13 +135,93 @@ export function DashboardClient({ stats, isPaused }: {
     } catch (_) {}
   };
 
+  // Fetch live Auto-Pilot state
+  const fetchAutopilotStatus = async () => {
+    try {
+      const res = await fetch('/api/pipeline/autopilot');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setAutopilotState({
+            status: data.status,
+            remaining: data.remaining,
+            total: data.total,
+            autoPublish: data.autoPublish,
+          });
+        }
+      }
+    } catch (_) {}
+  };
+
   useEffect(() => {
     fetchCredits();
     fetchPipelineStatus();
-    // Poll every 3 seconds to track real-time job progress across stages
-    const interval = setInterval(fetchPipelineStatus, 3000);
+    fetchAutopilotStatus();
+    // Poll every 3 seconds to track real-time job progress across stages and autopilot
+    const interval = setInterval(() => {
+      fetchPipelineStatus();
+      fetchAutopilotStatus();
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleStartAutopilot = async () => {
+    setIsStartingAutopilot(true);
+    setMessage('');
+    try {
+      const isUnlimited = autopilotMode === 'unlimited';
+      const count = isUnlimited ? -1 : autopilotMode === '8' ? 8 : customBatchCount;
+      const res = await fetch('/api/pipeline/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', mode: isUnlimited ? 'unlimited' : 'count', count })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMessage(`🚀 Auto-Pilot initiated! System will autonomously generate, render, and publish ${isUnlimited ? 'until credits run out' : `${count} videos`} straight to YouTube Shorts.`);
+        setMessageType('success');
+        setCredits((prev) => Math.max(0, prev - 1));
+        fetchAutopilotStatus();
+        fetchPipelineStatus();
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to start Auto-Pilot.'}`);
+        setMessageType('error');
+      }
+    } catch (e: any) {
+      setMessage(`✗ ${e.message}`);
+      setMessageType('error');
+    } finally {
+      setIsStartingAutopilot(false);
+      setTimeout(() => setMessage(''), 7000);
+    }
+  };
+
+  const handleStopAutopilot = async () => {
+    try {
+      await fetch('/api/pipeline/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' })
+      });
+      setMessage('✓ Auto-Pilot stopped. Any video currently rendering will finish cleanly.');
+      setMessageType('success');
+      fetchAutopilotStatus();
+    } catch (_) {}
+  };
+
+  const handleToggleAutoPublish = async (enabled: boolean) => {
+    try {
+      await fetch('/api/pipeline/autopilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_auto_publish', autoPublish: enabled })
+      });
+      setAutopilotState((prev) => ({ ...prev, autoPublish: enabled }));
+      setMessage(enabled ? '✓ Auto-Publish enabled: Videos will upload to YouTube Shorts automatically on QA pass.' : '✓ Manual Approval required: Videos will wait for your review.');
+      setMessageType('success');
+      setTimeout(() => setMessage(''), 5000);
+    } catch (_) {}
+  };
 
   const executeGenerate = async () => {
     setIsGenerating(true);
@@ -312,6 +412,224 @@ export function DashboardClient({ stats, isPaused }: {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ── AUTONOMOUS AUTO-PILOT ENGINE CARD ────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border-2 border-indigo-500/30 rounded-2xl p-5 sm:p-7 shadow-xl space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
+              <Bot className="w-6 h-6 text-indigo-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                  Autonomous Auto-Pilot Engine
+                </h3>
+                {autopilotState.status === 'active' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    AUTO-PILOT ACTIVE
+                  </span>
+                ) : autopilotState.status === 'paused' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    PAUSED
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                    Standby
+                  </span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Generates, renders, and publishes viral Shorts directly to your YouTube channel without you needing to manually approve each one.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Auto-Publish Toggle */}
+          <div className="flex items-center gap-3 bg-slate-950/60 p-2.5 sm:p-3 rounded-xl border border-slate-800 shrink-0">
+            <span className="text-xs text-slate-300 font-medium">Auto-Publish to YouTube:</span>
+            <button
+              type="button"
+              onClick={() => handleToggleAutoPublish(!autopilotState.autoPublish)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                autopilotState.autoPublish ? 'bg-emerald-500' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  autopilotState.autoPublish ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Active Auto-Pilot Progress Display */}
+        {autopilotState.status === 'active' ? (
+          <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+                  <Rocket className="w-4 h-4 text-emerald-400" />
+                  {autopilotState.remaining === -1
+                    ? `Continuous Mode Active: Publishing until credits run out (${credits} credits remaining)`
+                    : `Batch in Progress: ${autopilotState.remaining} video(s) remaining`}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Each video will be researched, scripted, voiced, rendered, and automatically uploaded to YouTube Shorts.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleStopAutopilot}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 hover:text-red-200 text-xs font-bold rounded-xl transition cursor-pointer shrink-0"
+              >
+                <Power className="w-3.5 h-3.5" /> Stop Auto-Pilot
+              </button>
+            </div>
+
+            {/* Batch Progress Bar if not unlimited */}
+            {autopilotState.remaining > 0 && autopilotState.total > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>Batch Progress</span>
+                  <span>{autopilotState.total - autopilotState.remaining} / {autopilotState.total} Videos Completed</span>
+                </div>
+                <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.round(((autopilotState.total - autopilotState.remaining) / autopilotState.total) * 100))}%`
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Auto-Pilot Configuration & Launch Controls */
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Option 1: 8 Videos */}
+              <button
+                type="button"
+                onClick={() => setAutopilotMode('8')}
+                className={`p-4 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                  autopilotMode === '8'
+                    ? 'bg-indigo-600/15 border-indigo-500 shadow-md shadow-indigo-500/10'
+                    : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-400 uppercase tracking-wider">Recommended</span>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${autopilotMode === '8' ? 'border-indigo-400 bg-indigo-500' : 'border-slate-700'}`}>
+                    {autopilotMode === '8' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <h4 className="text-base font-bold text-white">Publish 8 Videos</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Creates & publishes an 8-video batch autonomously</p>
+                </div>
+                <p className="text-[11px] font-mono text-indigo-300/80 mt-2">Cost: 8 Credits</p>
+              </button>
+
+              {/* Option 2: Unlimited (Until Credits Run Out) */}
+              <button
+                type="button"
+                onClick={() => setAutopilotMode('unlimited')}
+                className={`p-4 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                  autopilotMode === 'unlimited'
+                    ? 'bg-[#26e200]/15 border-[#26e200] shadow-md shadow-[#26e200]/10'
+                    : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-[#26e200] uppercase tracking-wider">Continuous</span>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${autopilotMode === 'unlimited' ? 'border-[#26e200] bg-[#26e200]' : 'border-slate-700'}`}>
+                    {autopilotMode === 'unlimited' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <h4 className="text-base font-bold text-white">Until Credits End</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Runs continuously until all your credits are used</p>
+                </div>
+                <p className="text-[11px] font-mono text-[#26e200]/80 mt-2">{credits} Videos Available</p>
+              </button>
+
+              {/* Option 3: Custom Count */}
+              <button
+                type="button"
+                onClick={() => setAutopilotMode('custom')}
+                className={`p-4 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                  autopilotMode === 'custom'
+                    ? 'bg-purple-600/15 border-purple-500 shadow-md shadow-purple-500/10'
+                    : 'bg-slate-950/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-purple-400 uppercase tracking-wider">Custom Batch</span>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${autopilotMode === 'custom' ? 'border-purple-400 bg-purple-500' : 'border-slate-700'}`}>
+                    {autopilotMode === 'custom' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold text-white">Custom:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.min(50, Math.max(1, credits))}
+                      value={customBatchCount}
+                      onChange={(e) => {
+                        setCustomBatchCount(Math.max(1, parseInt(e.target.value) || 1));
+                        setAutopilotMode('custom');
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-sm text-white font-bold"
+                    />
+                    <span className="text-xs text-slate-300">Videos</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">Set any batch count up to your balance</p>
+                </div>
+                <p className="text-[11px] font-mono text-purple-300/80 mt-2">Cost: {customBatchCount} Credits</p>
+              </button>
+            </div>
+
+            {/* Launch Auto-Pilot Button */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+              <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                <span>⚡️</span>
+                <span>Each video takes ~35s to generate and automatically publishes to YouTube Shorts.</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartAutopilot}
+                disabled={isStartingAutopilot || credits < 1 || isPaused}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition shadow-lg cursor-pointer bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:from-indigo-400 hover:to-pink-400 text-white shadow-indigo-500/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isStartingAutopilot ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Initiating Auto-Pilot...</span>
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-4 h-4" />
+                    <span>
+                      {autopilotMode === '8'
+                        ? 'Launch 8-Video Auto-Pilot'
+                        : autopilotMode === 'unlimited'
+                        ? 'Launch Continuous Auto-Pilot'
+                        : `Launch ${customBatchCount}-Video Auto-Pilot`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── AUTONOMOUS PIPELINE STAGES WITH REAL-TIME GLOW ─────────────────── */}
