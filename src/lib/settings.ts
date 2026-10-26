@@ -12,14 +12,17 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   DEFAULT_VOICE: 'pNInz6obpgDQGcFmaJgB',
   DEFAULT_TEMPLATE: 'GameplayFactsTemplate',
   DEFAULT_LLM_PROVIDER: 'auto', // 'auto' | 'openai' | 'gemini' | 'mock'
-  POSTING_SCHEDULE: '12:30,15:30,18:30,20:30,22:30',
+  POSTING_SCHEDULE: '09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00',
+  SCHEDULE_MODE: 'active', // 'active' | 'paused'
+  SCHEDULE_LAST_SLOT: '',
+  SCHEDULE_AUTO_GENERATE: 'true',
   AUTOMATION_PAUSED: 'false',
   CONTENT_STYLE: 'FAST_PACED',
   AUDIO_VOICE_VOLUME: '1.0',
   AUDIO_MUSIC_VOLUME: '0.3',
   AUDIO_DUCK_MUSIC: 'true',
   GEMINI_API_KEY: '',
-  AUTO_PUBLISH: 'false',
+  AUTO_PUBLISH: 'true',
   AUTOPILOT_STATUS: 'idle', // 'idle' | 'active' | 'paused'
   AUTOPILOT_USER_ID: '',
   AUTOPILOT_REMAINING: '0',

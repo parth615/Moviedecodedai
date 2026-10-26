@@ -17,7 +17,12 @@ import {
   Bot,
   Rocket,
   RefreshCw,
-  Power
+  Power,
+  Calendar,
+  Plus,
+  Trash2,
+  Timer,
+  CheckCircle2
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { UpiPaymentModal } from '@/components/UpiPaymentModal';
@@ -93,6 +98,30 @@ export function DashboardClient({ stats, isPaused }: {
   const [customBatchCount, setCustomBatchCount] = useState<number>(8);
   const [isStartingAutopilot, setIsStartingAutopilot] = useState(false);
 
+  // Hands-Free Schedule State
+  const [scheduleState, setScheduleState] = useState<{
+    schedule: string[];
+    scheduleMode: 'active' | 'paused';
+    autoPublish: boolean;
+    autoGenerate: boolean;
+    currentTimeIst: string;
+    nextSlotIst: string;
+    totalDailySlots: number;
+    connectedYouTube: boolean;
+  }>({
+    schedule: ['09:00', '11:00', '13:00', '15:00', '17:00', '19:00', '21:00', '23:00'],
+    scheduleMode: 'active',
+    autoPublish: true,
+    autoGenerate: true,
+    currentTimeIst: '',
+    nextSlotIst: '',
+    totalDailySlots: 8,
+    connectedYouTube: true
+  });
+  const [newTimeInput, setNewTimeInput] = useState('12:00');
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [isTriggeringNow, setIsTriggeringNow] = useState(false);
+
   // Check URL query param for ?token= or ?redeem=
   useEffect(() => {
     const queryToken = searchParams?.get('token') || searchParams?.get('redeem');
@@ -153,17 +182,189 @@ export function DashboardClient({ stats, isPaused }: {
     } catch (_) {}
   };
 
+  // Fetch live Hands-Free Schedule state
+  const fetchSchedule = async () => {
+    try {
+      const res = await fetch('/api/pipeline/schedule');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setScheduleState({
+            schedule: data.schedule,
+            scheduleMode: data.scheduleMode,
+            autoPublish: data.autoPublish,
+            autoGenerate: data.autoGenerate,
+            currentTimeIst: data.currentTimeIst,
+            nextSlotIst: data.nextSlotIst,
+            totalDailySlots: data.totalDailySlots,
+            connectedYouTube: data.connectedYouTube,
+          });
+        }
+      }
+    } catch (_) {}
+  };
+
   useEffect(() => {
     fetchCredits();
     fetchPipelineStatus();
     fetchAutopilotStatus();
-    // Poll every 3 seconds to track real-time job progress across stages and autopilot
+    fetchSchedule();
+    // Poll every 3 seconds to track real-time job progress across stages, autopilot, and schedule
     const interval = setInterval(() => {
       fetchPipelineStatus();
       fetchAutopilotStatus();
+      fetchSchedule();
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleToggleScheduleMode = async () => {
+    try {
+      const res = await fetch('/api/pipeline/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_schedule' })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setScheduleState((prev) => ({ ...prev, scheduleMode: data.scheduleMode }));
+        setMessage(`✓ ${data.message}`);
+        setMessageType('success');
+      }
+    } catch (e: any) {
+      setMessage(`✗ ${e.message}`);
+      setMessageType('error');
+    }
+  };
+
+  const handleSetPreset = async (preset: '8_daily' | '4_daily' | '12_daily') => {
+    setIsSavingSchedule(true);
+    try {
+      const res = await fetch('/api/pipeline/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_preset', preset })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setScheduleState((prev) => ({
+          ...prev,
+          schedule: data.schedule,
+          scheduleMode: data.scheduleMode,
+          nextSlotIst: data.nextSlotIst,
+          totalDailySlots: data.schedule.length
+        }));
+        setMessage(`✓ ${data.message}`);
+        setMessageType('success');
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to apply preset'}`);
+        setMessageType('error');
+      }
+    } catch (e: any) {
+      setMessage(`✗ ${e.message}`);
+      setMessageType('error');
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
+
+  const handleAddSlot = async () => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(newTimeInput)) {
+      setMessage('✗ Please enter a valid time in HH:MM format (24-hour).');
+      setMessageType('error');
+      return;
+    }
+    if (scheduleState.schedule.includes(newTimeInput)) {
+      setMessage(`✗ Time ${newTimeInput} is already in your schedule.`);
+      setMessageType('error');
+      return;
+    }
+    const updated = [...scheduleState.schedule, newTimeInput].sort();
+    setIsSavingSchedule(true);
+    try {
+      const res = await fetch('/api/pipeline/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_times', times: updated })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setScheduleState((prev) => ({
+          ...prev,
+          schedule: data.schedule,
+          nextSlotIst: data.nextSlotIst,
+          totalDailySlots: data.schedule.length
+        }));
+        setMessage(`✓ Added ${newTimeInput} IST to your daily posting schedule.`);
+        setMessageType('success');
+      }
+    } catch (e: any) {
+      setMessage(`✗ ${e.message}`);
+      setMessageType('error');
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
+
+  const handleRemoveSlot = async (timeToRemove: string) => {
+    if (scheduleState.schedule.length <= 1) {
+      setMessage('✗ Schedule must have at least 1 posting time.');
+      setMessageType('error');
+      return;
+    }
+    const updated = scheduleState.schedule.filter((t) => t !== timeToRemove);
+    setIsSavingSchedule(true);
+    try {
+      const res = await fetch('/api/pipeline/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_times', times: updated })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setScheduleState((prev) => ({
+          ...prev,
+          schedule: data.schedule,
+          nextSlotIst: data.nextSlotIst,
+          totalDailySlots: data.schedule.length
+        }));
+        setMessage(`✓ Removed ${timeToRemove} IST.`);
+        setMessageType('success');
+      }
+    } catch (e: any) {
+      setMessage(`✗ ${e.message}`);
+      setMessageType('error');
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
+
+  const handleTriggerScheduledNow = async () => {
+    setIsTriggeringNow(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/pipeline/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trigger_now' })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMessage(`🚀 ${data.message}`);
+        setMessageType('success');
+        setCredits((prev) => Math.max(0, prev - 1));
+        fetchPipelineStatus();
+      } else {
+        setMessage(`✗ ${data.error || 'Failed to trigger scheduled slot'}`);
+        setMessageType('error');
+      }
+    } catch (e: any) {
+      setMessage(`✗ ${e.message}`);
+      setMessageType('error');
+    } finally {
+      setIsTriggeringNow(false);
+    }
+  };
 
   const handleStartAutopilot = async () => {
     setIsStartingAutopilot(true);
@@ -412,6 +613,195 @@ export function DashboardClient({ stats, isPaused }: {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ── HANDS-FREE DAILY PUBLISHING SCHEDULE CARD ──────────────────────────── */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border-2 border-emerald-500/40 rounded-2xl p-5 sm:p-7 shadow-xl space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <Calendar className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                  Hands-Free Daily YouTube Schedule
+                </h3>
+                {scheduleState.scheduleMode === 'active' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    DAILY CLOCK ACTIVE ({scheduleState.schedule.length} SHORTS / DAY)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    PAUSED
+                  </span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Zero dashboard visits needed! At your scheduled times, the system automatically researches, crafts, renders, and publishes YouTube Shorts on the clock.
+              </p>
+            </div>
+          </div>
+
+          {/* Master Schedule Toggle */}
+          <div className="flex items-center gap-3 bg-slate-950/60 p-2.5 sm:p-3 rounded-xl border border-slate-800 shrink-0">
+            <span className="text-xs text-slate-300 font-medium">Daily Schedule:</span>
+            <button
+              type="button"
+              onClick={handleToggleScheduleMode}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                scheduleState.scheduleMode === 'active' ? 'bg-emerald-500' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  scheduleState.scheduleMode === 'active' ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Live Clock & Next Video Banner */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/70 border border-slate-800/80 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <Timer className="w-5 h-5 text-indigo-400 shrink-0" />
+            <div>
+              <p className="text-[11px] text-slate-400 uppercase font-semibold">Current Time (IST)</p>
+              <p className="text-sm sm:text-base font-black text-white">{scheduleState.currentTimeIst || '--:--'} IST</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 border-t sm:border-t-0 sm:border-l border-slate-800 pt-2 sm:pt-0 sm:pl-4">
+            <Rocket className="w-5 h-5 text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-[11px] text-slate-400 uppercase font-semibold">Next Scheduled Drop</p>
+              <p className="text-sm sm:text-base font-black text-emerald-300">
+                {scheduleState.scheduleMode === 'active' ? `${scheduleState.nextSlotIst} IST` : 'Schedule is Paused'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 sm:border-l border-slate-800 pt-2 sm:pt-0 sm:pl-4">
+            <button
+              type="button"
+              onClick={handleTriggerScheduledNow}
+              disabled={isTriggeringNow}
+              className="w-full sm:w-auto px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              {isTriggeringNow ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-indigo-400" />}
+              <span>Test Scheduled Drop Now</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 1-Click Presets */}
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            <span>⚡️ 1-Click Daily Presets</span>
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => handleSetPreset('8_daily')}
+              className={`p-3.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                scheduleState.schedule.length === 8 && scheduleState.schedule[0] === '09:00'
+                  ? 'bg-emerald-500/15 border-emerald-500/60 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/50'
+                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white">8 Shorts / Day</span>
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  Recommended
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Every 2 hours (09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00)</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetPreset('4_daily')}
+              className={`p-3.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                scheduleState.schedule.length === 4
+                  ? 'bg-emerald-500/15 border-emerald-500/60 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/50'
+                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white">4 Shorts / Day</span>
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                  Peak Hours
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Prime audience times (10:00, 14:00, 18:00, 21:00)</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetPreset('12_daily')}
+              className={`p-3.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                scheduleState.schedule.length === 12
+                  ? 'bg-emerald-500/15 border-emerald-500/60 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/50'
+                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white">12 Shorts / Day</span>
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                  Rapid Growth
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Every 90 mins from 08:00 to 00:30</p>
+            </button>
+          </div>
+        </div>
+
+        {/* Time Chips & Custom Slot Adder */}
+        <div className="space-y-3 pt-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-300">
+              Active Posting Times ({scheduleState.schedule.length} daily slots):
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={newTimeInput}
+                onChange={(e) => setNewTimeInput(e.target.value)}
+                className="bg-slate-950 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleAddSlot}
+                disabled={isSavingSchedule}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Slot
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl min-h-[52px] items-center">
+            {scheduleState.schedule.map((slot) => (
+              <span
+                key={slot}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 shadow-sm"
+              >
+                <Clock className="w-3 h-3 text-emerald-400" />
+                {slot} IST
+                <button
+                  type="button"
+                  onClick={() => handleRemoveSlot(slot)}
+                  className="hover:text-red-400 ml-1 transition cursor-pointer p-0.5 rounded hover:bg-red-500/20"
+                  title={`Remove ${slot}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* ── AUTONOMOUS AUTO-PILOT ENGINE CARD ────────────────────────────────── */}

@@ -139,36 +139,150 @@ async function processNextJob() {
 }
 
 async function runScheduler() {
-  const isPaused = await getSetting('AUTOMATION_PAUSED');
-  if (isPaused === 'true') return;
+  const [isPaused, scheduleMode] = await Promise.all([
+    getSetting('AUTOMATION_PAUSED'),
+    getSetting('SCHEDULE_MODE')
+  ]);
+  if (isPaused === 'true' || scheduleMode === 'paused') return;
 
   const scheduleStr = await getSetting('POSTING_SCHEDULE');
-  const times = scheduleStr.split(',').map((t: string) => t.trim());
+  const times = scheduleStr
+    .split(',')
+    .map((t: string) => t.trim())
+    .filter(Boolean);
 
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  const timeFormatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kolkata',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false
+    hourCycle: 'h23'
   });
-  const currentTime = formatter.format(now);
+  const currentTime = timeFormatter.format(now);
+
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const todayDate = dateFormatter.format(now);
+  const currentSlotKey = `${todayDate}_${currentTime}`;
 
   if (times.includes(currentTime)) {
-    const recentlyScheduled = await prisma.job.findFirst({
-      where: { name: 'PUBLISH_VIDEO', createdAt: { gte: new Date(Date.now() - 60000) } }
-    });
-    if (recentlyScheduled) return;
+    const lastSlot = await getSetting('SCHEDULE_LAST_SLOT');
+    if (lastSlot === currentSlotKey) {
+      return; // Already executed for this minute slot
+    }
 
+    // Mark slot as triggered immediately
+    await prisma.setting.upsert({
+      where: { key: 'SCHEDULE_LAST_SLOT' },
+      update: { value: currentSlotKey },
+      create: { key: 'SCHEDULE_LAST_SLOT', value: currentSlotKey }
+    });
+
+    console.log(`[SCHEDULER] ⏰ Scheduled posting time triggered at ${currentTime} IST (Slot: ${currentSlotKey})`);
+
+    // Priority 1: Check for an already approved video
     const approvedVideo = await prisma.video.findFirst({
       where: { status: 'APPROVED' },
       orderBy: { updatedAt: 'asc' }
     });
 
     if (approvedVideo) {
-      console.log(`[SCHEDULER] Publishing video ${approvedVideo.id} at scheduled time ${currentTime}`);
+      console.log(`[SCHEDULER] Publishing pre-approved video ${approvedVideo.id} at scheduled slot ${currentTime} IST...`);
       await enqueueJob('PUBLISH_VIDEO', { videoId: approvedVideo.id });
+      return;
     }
+
+    // Priority 2: Check for a video waiting for approval -> Auto-approve and publish
+    const readyVideo = await prisma.video.findFirst({
+      where: { status: 'READY_FOR_APPROVAL' },
+      orderBy: { updatedAt: 'asc' }
+    });
+
+    if (readyVideo) {
+      console.log(`[SCHEDULER] Video ${readyVideo.id} is ready for approval. Auto-approving & publishing at ${currentTime} IST...`);
+      await prisma.approval.upsert({
+        where: { videoId: readyVideo.id },
+        update: { status: 'APPROVED', reviewer: 'Scheduler', approvedAt: new Date() },
+        create: { videoId: readyVideo.id, status: 'APPROVED', reviewer: 'Scheduler', approvedAt: new Date() }
+      });
+      await prisma.video.update({
+        where: { id: readyVideo.id },
+        data: { status: 'APPROVED' }
+      });
+      await prisma.script.update({
+        where: { id: readyVideo.scriptId },
+        data: { status: 'READY_FOR_PUBLISHING' }
+      });
+      await enqueueJob('PUBLISH_VIDEO', { videoId: readyVideo.id });
+      return;
+    }
+
+    // Priority 3: Check if a video generation pipeline is already in progress
+    const activePipelineJob = await prisma.job.findFirst({
+      where: {
+        name: { in: ['GENERATE_TOPICS', 'RESEARCH_TOPIC', 'GENERATE_SCRIPT', 'GENERATE_VOICE', 'GENERATE_VISUALS', 'RENDER_VIDEO', 'RUN_QA', 'PUBLISH_VIDEO'] },
+        status: { in: ['PENDING', 'PROCESSING'] }
+      }
+    });
+
+    if (activePipelineJob) {
+      console.log(`[SCHEDULER] A video pipeline is already active (${activePipelineJob.name}). It will auto-publish upon QA completion.`);
+      return;
+    }
+
+    // Priority 4: Queue is empty -> Hands-free on-demand generation and auto-publish
+    const autoGenSetting = await getSetting('SCHEDULE_AUTO_GENERATE');
+    if (autoGenSetting === 'false') {
+      console.log(`[SCHEDULER] Queue is empty and SCHEDULE_AUTO_GENERATE is disabled. Skipping slot.`);
+      return;
+    }
+
+    // Find the user to debit credits and link YouTube credentials
+    const autopilotUserId = await getSetting('AUTOPILOT_USER_ID');
+    let user = autopilotUserId 
+      ? await prisma.user.findUnique({ where: { id: autopilotUserId } })
+      : null;
+
+    if (!user || user.credits < 1) {
+      const ytCred = await prisma.oAuthCredential.findFirst({
+        where: { provider: 'youtube', userId: { not: null } },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (ytCred?.userId) {
+        user = await prisma.user.findUnique({ where: { id: ytCred.userId } });
+      }
+    }
+
+    if (!user || user.credits < 1) {
+      user = await prisma.user.findFirst({
+        where: { credits: { gte: 1 } },
+        orderBy: { updatedAt: 'desc' }
+      });
+    }
+
+    if (!user || user.credits < 1) {
+      console.warn(`[SCHEDULER] Scheduled slot ${currentTime} IST arrived, but no active user with credits found. Credits needed: 1.`);
+      return;
+    }
+
+    // Deduct 1 credit & trigger full autonomous pipeline with AUTO_PUBLISH enabled
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { credits: { decrement: 1 } }
+    });
+
+    await prisma.setting.upsert({
+      where: { key: 'AUTO_PUBLISH' },
+      update: { value: 'true' },
+      create: { key: 'AUTO_PUBLISH', value: 'true' }
+    });
+
+    console.log(`[SCHEDULER] 🚀 Hands-free generation triggered at ${currentTime} IST for ${user.name || user.email}! 1 credit used (${user.credits - 1} remaining). Full pipeline will craft and auto-publish short to YouTube.`);
+    await enqueueJob('GENERATE_TOPICS', { userId: user.id, count: 1 });
   }
 }
 
