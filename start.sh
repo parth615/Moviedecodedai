@@ -60,6 +60,26 @@ async function init() {
   await prisma.setting.upsert({ where: { key: 'AUTO_PUBLISH' }, update: {}, create: { key: 'AUTO_PUBLISH', value: 'true' } });
   const creditRes = await prisma.user.updateMany({ where: { credits: { lt: 5 } }, data: { credits: 10 } });
   if (creditRes.count > 0) console.log('==> Granted starter credits to', creditRes.count, 'users');
+
+  // Seed YouTube channel OAuth credentials if configured via env
+  const ytRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+  if (ytRefreshToken) {
+    const existingYt = await prisma.oAuthCredential.findFirst({ where: { provider: 'youtube' } });
+    if (!existingYt) {
+      const user = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
+      await prisma.oAuthCredential.create({
+        data: {
+          userId: user ? user.id : null,
+          provider: 'youtube',
+          accessToken: 'initial',
+          refreshToken: ytRefreshToken,
+          scopes: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/youtube.readonly',
+          accountInfo: JSON.stringify({ name: 'Channel Owner' })
+        }
+      });
+      console.log('==> Seeded YouTube channel connection from YOUTUBE_REFRESH_TOKEN');
+    }
+  }
   await prisma.\$disconnect();
 }
 init().catch(console.error);
@@ -72,6 +92,15 @@ init().catch(console.error);
     npm run worker
     echo "==> [WORKER] Worker exited ($?). Auto-restarting in 3s..."
     sleep 3
+  done
+) &
+
+# 24/7 Keep-Alive pinger (keeps cloud container awake even when user laptop is shut)
+(
+  sleep 30
+  while true; do
+    curl -s "http://127.0.0.1:${PORT:-3000}/health" > /dev/null 2>&1 || true
+    sleep 600
   done
 ) &
 
