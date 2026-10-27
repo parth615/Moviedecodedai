@@ -183,9 +183,12 @@ export async function POST(req: Request) {
       await setSetting('AUTO_PUBLISH', 'true');
       await setSetting('AUTOPILOT_USER_ID', user.id);
 
-      // Check for approved or ready video first
+      // Check for fresh approved or ready video (from last 24 hours) first
       const approvedVideo = await prisma.video.findFirst({
-        where: { status: 'APPROVED' },
+        where: {
+          status: 'APPROVED',
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        },
         orderBy: { updatedAt: 'asc' }
       });
 
@@ -198,7 +201,10 @@ export async function POST(req: Request) {
       }
 
       const readyVideo = await prisma.video.findFirst({
-        where: { status: 'READY_FOR_APPROVAL' },
+        where: {
+          status: 'READY_FOR_APPROVAL',
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        },
         orderBy: { updatedAt: 'asc' }
       });
 

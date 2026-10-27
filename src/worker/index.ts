@@ -138,72 +138,39 @@ async function processNextJob() {
   }
 }
 
-async function runScheduler() {
-  const [isPaused, scheduleMode] = await Promise.all([
-    getSetting('AUTOMATION_PAUSED'),
-    getSetting('SCHEDULE_MODE')
-  ]);
-  if (isPaused === 'true' || scheduleMode === 'paused') return;
-
-  const scheduleStr = await getSetting('POSTING_SCHEDULE');
-  const times = scheduleStr
-    .split(',')
-    .map((t: string) => t.trim())
-    .filter(Boolean);
-
-  const now = new Date();
-  const timeFormatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  });
-  const currentTime = timeFormatter.format(now);
-
-  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  const todayDate = dateFormatter.format(now);
-  const currentSlotKey = `${todayDate}_${currentTime}`;
-
-  if (times.includes(currentTime)) {
-    const lastSlot = await getSetting('SCHEDULE_LAST_SLOT');
-    if (lastSlot === currentSlotKey) {
-      return; // Already executed for this minute slot
-    }
-
-    // Mark slot as triggered immediately
-    await prisma.setting.upsert({
-      where: { key: 'SCHEDULE_LAST_SLOT' },
-      update: { value: currentSlotKey },
-      create: { key: 'SCHEDULE_LAST_SLOT', value: currentSlotKey }
-    });
-
-    console.log(`[SCHEDULER] ⏰ Scheduled posting time triggered at ${currentTime} IST (Slot: ${currentSlotKey})`);
-
-    // Priority 1: Check for an already approved video
+async function executeScheduledSlot(slotTime: string, slotKey: string) {
+  try {
+    // Priority 1: Check for an already approved video created in the last 24 hours
     const approvedVideo = await prisma.video.findFirst({
-      where: { status: 'APPROVED' },
+      where: {
+        status: 'APPROVED',
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      },
       orderBy: { updatedAt: 'asc' }
     });
 
     if (approvedVideo) {
-      console.log(`[SCHEDULER] Publishing pre-approved video ${approvedVideo.id} at scheduled slot ${currentTime} IST...`);
+      console.log(`[SCHEDULER] Publishing fresh approved video ${approvedVideo.id} at scheduled slot ${slotTime} IST...`);
       await enqueueJob('PUBLISH_VIDEO', { videoId: approvedVideo.id });
+      await prisma.setting.upsert({
+        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
+        update: { value: 'completed' },
+        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
+      });
       return;
     }
 
-    // Priority 2: Check for a video waiting for approval -> Auto-approve and publish
+    // Priority 2: Check for a video waiting for approval created in the last 24 hours
     const readyVideo = await prisma.video.findFirst({
-      where: { status: 'READY_FOR_APPROVAL' },
+      where: {
+        status: 'READY_FOR_APPROVAL',
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      },
       orderBy: { updatedAt: 'asc' }
     });
 
     if (readyVideo) {
-      console.log(`[SCHEDULER] Video ${readyVideo.id} is ready for approval. Auto-approving & publishing at ${currentTime} IST...`);
+      console.log(`[SCHEDULER] Fresh video ${readyVideo.id} is ready for approval. Auto-approving & publishing for slot ${slotTime} IST...`);
       await prisma.approval.upsert({
         where: { videoId: readyVideo.id },
         update: { status: 'APPROVED', reviewer: 'Scheduler', approvedAt: new Date() },
@@ -218,6 +185,11 @@ async function runScheduler() {
         data: { status: 'READY_FOR_PUBLISHING' }
       });
       await enqueueJob('PUBLISH_VIDEO', { videoId: readyVideo.id });
+      await prisma.setting.upsert({
+        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
+        update: { value: 'completed' },
+        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
+      });
       return;
     }
 
@@ -230,7 +202,12 @@ async function runScheduler() {
     });
 
     if (activePipelineJob) {
-      console.log(`[SCHEDULER] A video pipeline is already active (${activePipelineJob.name}). It will auto-publish upon QA completion.`);
+      console.log(`[SCHEDULER] A video pipeline is already active (${activePipelineJob.name}). Marking slot ${slotTime} as assigned; it will auto-publish upon QA pass.`);
+      await prisma.setting.upsert({
+        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
+        update: { value: 'completed' },
+        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
+      });
       return;
     }
 
@@ -265,7 +242,12 @@ async function runScheduler() {
     }
 
     if (!user || user.credits < 1) {
-      console.warn(`[SCHEDULER] Scheduled slot ${currentTime} IST arrived, but no active user with credits found. Credits needed: 1.`);
+      console.warn(`[SCHEDULER] Scheduled slot ${slotTime} IST arrived, but no active user with credits found. Credits needed: 1.`);
+      await prisma.setting.upsert({
+        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
+        update: { value: 'insufficient_credits' },
+        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'insufficient_credits' }
+      });
       return;
     }
 
@@ -281,8 +263,79 @@ async function runScheduler() {
       create: { key: 'AUTO_PUBLISH', value: 'true' }
     });
 
-    console.log(`[SCHEDULER] 🚀 Hands-free generation triggered at ${currentTime} IST for ${user.name || user.email}! 1 credit used (${user.credits - 1} remaining). Full pipeline will craft and auto-publish short to YouTube.`);
+    await prisma.setting.upsert({
+      where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
+      update: { value: 'completed' },
+      create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
+    });
+
+    console.log(`[SCHEDULER] 🚀 Hands-free scheduled generation triggered at ${slotTime} IST for ${user.name || user.email}! 1 credit used (${user.credits - 1} remaining). Full pipeline will craft and auto-publish short to YouTube.`);
     await enqueueJob('GENERATE_TOPICS', { userId: user.id, count: 1 });
+  } catch (err: any) {
+    console.error(`[SCHEDULER] Error executing slot ${slotTime}:`, err.message);
+  }
+}
+
+async function runScheduler() {
+  const [isPaused, scheduleMode] = await Promise.all([
+    getSetting('AUTOMATION_PAUSED'),
+    getSetting('SCHEDULE_MODE')
+  ]);
+  if (isPaused === 'true' || scheduleMode === 'paused') return;
+
+  const scheduleStr = await getSetting('POSTING_SCHEDULE');
+  const times = scheduleStr
+    .split(',')
+    .map((t: string) => t.trim())
+    .filter(Boolean);
+
+  const now = new Date();
+  const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  });
+  const currentTime = timeFormatter.format(now);
+
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const todayDate = dateFormatter.format(now);
+
+  const [currHour, currMin] = currentTime.split(':').map(Number);
+  if (isNaN(currHour) || isNaN(currMin)) return;
+  const currMinutes = currHour * 60 + currMin;
+
+  for (const slotTime of times) {
+    const slotKey = `${todayDate}_${slotTime}`;
+    const [slotHour, slotMin] = slotTime.split(':').map(Number);
+    if (isNaN(slotHour) || isNaN(slotMin)) continue;
+
+    const slotMinutes = slotHour * 60 + slotMin;
+
+    // A slot is triggered if currentTime is within [slotMinutes, slotMinutes + 45]
+    // This allows recovery if the worker was busy processing another job or server restarted
+    if (currMinutes >= slotMinutes && currMinutes <= slotMinutes + 45) {
+      const slotRun = await getSetting(`SCHEDULE_SLOT_RUN_${slotKey}`);
+      if (slotRun === 'completed' || slotRun === 'processing') {
+        continue; // Already triggered today
+      }
+
+      // Mark processing to lock the slot
+      await prisma.setting.upsert({
+        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
+        update: { value: 'processing' },
+        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'processing' }
+      });
+
+      console.log(`[SCHEDULER] ⏰ Scheduled posting time active: ${slotTime} IST (Key: ${slotKey}, current time: ${currentTime} IST)`);
+      await executeScheduledSlot(slotTime, slotKey);
+      break; // Run one slot per tick
+    }
   }
 }
 
@@ -298,14 +351,26 @@ async function startWorker() {
     console.log(`[WORKER] Reset ${stuckJobs.count} stuck PROCESSING jobs back to PENDING.`);
   }
 
+  // Independent scheduler loop every 5 seconds (never blocked by video rendering or FFmpeg!)
+  (async () => {
+    while (true) {
+      try {
+        await runScheduler();
+      } catch (err: any) {
+        console.error('[SCHEDULER] Unexpected scheduler loop error:', err.message);
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  })();
+
+  // Main queue processor loop
   while (true) {
     try {
       await processNextJob();
-      await runScheduler();
     } catch (err: any) {
       console.error('[WORKER] Unexpected worker loop error:', err.message);
     }
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 }
 
