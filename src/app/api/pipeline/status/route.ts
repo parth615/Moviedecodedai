@@ -129,81 +129,84 @@ export async function GET() {
           completedStages.push(8);
         }
       }
+    }
 
-      // Determine the CURRENT ACTIVE STAGE based on latest entity & job presence
-      if (video) {
-        if (['READY_FOR_APPROVAL', 'COMPLETED'].includes(video.status)) {
-          activeStageIndex = 7;
-          activeStageLabel = 'Awaiting Your Approval';
-          detailedMessage = 'Video rendered successfully! Click below to review and publish.';
-          isProcessing = false;
-        } else if (video.status === 'APPROVED') {
-          activeStageIndex = 8;
-          activeStageLabel = 'Ready to Publish';
-          detailedMessage = 'Video approved! Ready to deploy to YouTube Shorts.';
-          isProcessing = false;
-        } else if (video.status === 'PUBLISHED') {
-          activeStageIndex = -1;
-          activeStageLabel = 'Published to YouTube';
-          detailedMessage = 'Live on YouTube Shorts!';
-          isProcessing = false;
-        } else if (video.qaScore === null && hasActiveJob) {
-          activeStageIndex = 6;
-          activeStageLabel = 'Quality Assurance & Scoring';
-          detailedMessage = 'Verifying audio sync, pacing, and visual safety...';
-          isProcessing = true;
-        } else {
-          // Guaranteed fallback: If video exists and is not published, it is awaiting approval
-          activeStageIndex = 7;
-          activeStageLabel = 'Awaiting Your Approval';
-          detailedMessage = 'Video rendered successfully! Click below to review and publish.';
-          isProcessing = false;
-        }
-      } else if (hasActiveJob) {
-        // Only show live processing if a job is ACTUALLY running or queued
-        if (latestTopic.script?.visualAssets && latestTopic.script.visualAssets.length > 0) {
-          activeStageIndex = 5;
-          activeStageLabel = 'Rendering 1080p Video';
-          detailedMessage = 'FFmpeg GPU engine is assembling split-screen video...';
-          isProcessing = true;
-        } else if (latestTopic.script?.voiceAsset) {
-          activeStageIndex = 4;
-          activeStageLabel = 'Creating Visuals & Subtitles';
-          detailedMessage = 'Generating cinematic scenes & kinetic ASS subtitles...';
-          isProcessing = true;
-        } else if (latestTopic.script) {
-          activeStageIndex = 3;
-          activeStageLabel = 'Generating Neural Voiceover';
-          detailedMessage = 'Synthesizing studio-grade audio with ElevenLabs...';
-          isProcessing = true;
-        } else if (latestTopic.research) {
-          activeStageIndex = 2;
-          activeStageLabel = 'Writing Viral Script';
-          detailedMessage = 'Crafting punchy 3-second hook & scene breakdown...';
-          isProcessing = true;
-        } else {
-          activeStageIndex = 1;
-          activeStageLabel = 'Researching Topic Facts';
-          detailedMessage = 'Extracting verified facts and narrative twists...';
-          isProcessing = true;
-        }
-      } else {
-        // No active jobs in queue! Unblock user immediately!
-        isProcessing = false;
-        activeStageIndex = -1;
-        activeStageLabel = 'Pipeline Idle';
-        detailedMessage = 'Ready to generate a new video. Click GENERATE VIRAL IDEAS above.';
-      }
-    } else if (isGeneratingTopic && hasActiveJob) {
-      activeStageIndex = 0;
-      activeStageLabel = 'Generating Viral Ideas';
-      detailedMessage = 'Gemini AI is researching viral hooks & trending angles...';
+    const video = latestTopic?.script?.video;
+
+    // Determine the CURRENT ACTIVE STAGE based on active jobs first, then latest entity
+    if (hasActiveJob && activeJobs.length > 0) {
       isProcessing = true;
+      const currentJob = activeJobs[0];
+
+      if (currentJob.name === 'GENERATE_TOPICS') {
+        activeStageIndex = 0;
+        activeStageLabel = 'Generating Viral Ideas';
+        detailedMessage = 'Gemini AI is researching viral hooks & trending angles...';
+      } else if (currentJob.name === 'RESEARCH_TOPIC') {
+        activeStageIndex = 1;
+        activeStageLabel = 'Deep Research & Fact-Checking';
+        detailedMessage = 'Mining Wikipedia and historical archives...';
+      } else if (currentJob.name === 'GENERATE_SCRIPT' || currentJob.name === 'FACT_CHECK') {
+        activeStageIndex = 2;
+        activeStageLabel = 'Writing Viral Script';
+        detailedMessage = 'Crafting 3-second visual hook and narrative arc...';
+      } else if (currentJob.name === 'GENERATE_VOICE') {
+        activeStageIndex = 3;
+        activeStageLabel = 'Generating Neural Voiceover';
+        detailedMessage = 'Synthesizing studio-grade audio with ElevenLabs...';
+      } else if (currentJob.name === 'GENERATE_VISUALS' || currentJob.name === 'GENERATE_SUBTITLES') {
+        activeStageIndex = 4;
+        activeStageLabel = 'Creating Visuals & Subtitles';
+        detailedMessage = 'Generating cinematic scenes & kinetic ASS subtitles...';
+      } else if (currentJob.name === 'RENDER_VIDEO') {
+        activeStageIndex = 5;
+        activeStageLabel = 'Rendering 1080p Video';
+        detailedMessage = 'FFmpeg GPU engine is assembling split-screen video...';
+      } else if (currentJob.name === 'RUN_QA') {
+        activeStageIndex = 6;
+        activeStageLabel = 'Quality Assurance & Scoring';
+        detailedMessage = 'Verifying audio sync, pacing, and visual safety...';
+      } else if (currentJob.name === 'PUBLISH_VIDEO') {
+        activeStageIndex = 8;
+        activeStageLabel = 'Publishing to YouTube';
+        detailedMessage = 'Uploading directly to YouTube Shorts...';
+      } else {
+        activeStageIndex = 0;
+        activeStageLabel = currentJob.name.replace(/_/g, ' ');
+        detailedMessage = 'Processing pipeline job...';
+      }
+    } else if (video) {
+      if (video.status === 'PUBLISHED') {
+        activeStageIndex = 8;
+        activeStageLabel = 'Published to YouTube';
+        detailedMessage = 'Live on YouTube Shorts!';
+        isProcessing = false;
+      } else if (['READY_FOR_APPROVAL', 'COMPLETED'].includes(video.status)) {
+        activeStageIndex = 7;
+        activeStageLabel = 'Awaiting Your Approval';
+        detailedMessage = 'Video rendered successfully! Click below to review and publish.';
+        isProcessing = false;
+      } else if (video.status === 'APPROVED') {
+        activeStageIndex = 8;
+        activeStageLabel = 'Ready to Publish';
+        detailedMessage = 'Video approved! Ready to deploy to YouTube Shorts.';
+        isProcessing = false;
+      } else if (video.qaScore === null) {
+        activeStageIndex = 6;
+        activeStageLabel = 'Quality Assurance & Scoring';
+        detailedMessage = 'Verifying audio sync, pacing, and visual safety...';
+        isProcessing = false;
+      } else {
+        activeStageIndex = 7;
+        activeStageLabel = 'Awaiting Your Approval';
+        detailedMessage = 'Video rendered successfully! Click below to review and publish.';
+        isProcessing = false;
+      }
     } else {
       isProcessing = false;
       activeStageIndex = -1;
       activeStageLabel = 'Pipeline Idle';
-      detailedMessage = 'Ready to generate a new video. Click GENERATE VIRAL IDEAS above.';
+      detailedMessage = 'Ready to generate a new video. Auto-Pilot or manual generation ready.';
     }
 
     // Deduplicate completed stages and sort

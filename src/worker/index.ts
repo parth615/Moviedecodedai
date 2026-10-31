@@ -154,6 +154,43 @@ async function processNextJob() {
   }
 }
 
+async function checkAutopilotWatchdog() {
+  try {
+    const apStatus = await getSetting('AUTOPILOT_STATUS');
+    if (apStatus !== 'active') return;
+
+    // Check if any job is currently PENDING or PROCESSING in queue
+    const activeJob = await prisma.job.findFirst({
+      where: { status: { in: ['PENDING', 'PROCESSING'] } }
+    });
+    if (activeJob) return; // Pipeline is already actively working
+
+    // Check if there are remaining videos to generate
+    const remainingStr = await getSetting('AUTOPILOT_REMAINING');
+    const remaining = parseInt(remainingStr, 10);
+    if (remaining === 0) return; // Batch completed
+
+    const userId = await getSetting('AUTOPILOT_USER_ID');
+    if (!userId) return;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.credits < 1) return;
+
+    // Ensure we don't double-trigger if a job finished less than 5 seconds ago
+    const lastJob = await prisma.job.findFirst({
+      orderBy: { updatedAt: 'desc' }
+    });
+    if (lastJob && Date.now() - new Date(lastJob.updatedAt).getTime() < 5000) {
+      return;
+    }
+
+    console.log(`[AUTOPILOT WATCHDOG] ⚡ Auto-Pilot is active (${remaining === -1 ? 'continuous' : `${remaining} remaining`}), but queue is idle. Resuming next video generation...`);
+    await enqueueJob('GENERATE_TOPICS', { userId, count: 1 });
+  } catch (err: any) {
+    console.error('[AUTOPILOT WATCHDOG] Error:', err.message);
+  }
+}
+
 async function startWorker() {
   console.log('[WORKER] Starting universal content engine worker...');
 
@@ -165,6 +202,18 @@ async function startWorker() {
   if (stuckJobs.count > 0) {
     console.log(`[WORKER] Reset ${stuckJobs.count} stuck PROCESSING jobs back to PENDING.`);
   }
+
+  // Auto-Pilot Watchdog loop to guarantee the autonomous pipeline never stalls
+  (async () => {
+    while (true) {
+      try {
+        await checkAutopilotWatchdog();
+      } catch (err: any) {
+        console.error('[AUTOPILOT WATCHDOG] Loop error:', err.message);
+      }
+      await new Promise(resolve => setTimeout(resolve, 8000));
+    }
+  })();
 
   // Main queue processor loop
   while (true) {

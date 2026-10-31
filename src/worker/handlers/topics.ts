@@ -67,17 +67,6 @@ export async function handleGenerateTopics(data: any, jobId: string) {
 
   await logToJob(jobId, `Generating ${countToGenerate} topic(s) on-demand (${todayCount}/${limit} used today).`);
 
-  // Build a diverse category list based on mix weights
-  const requestedCategories: string[] = [];
-  for (const group of CONTENT_MIX) {
-    const shuffled = [...group.categories].sort(() => Math.random() - 0.5);
-    requestedCategories.push(...shuffled);
-  }
-  const shuffledAll = requestedCategories.sort(() => Math.random() - 0.5);
-  const finalCategories = shuffledAll.slice(0, countToGenerate);
-
-  await logToJob(jobId, `Category mix requested: ${finalCategories.join(', ')}`);
-
   // Fetch recent topics across the database to supply an explicit negative list to LLM
   const pastTopics = await prisma.topic.findMany({
     select: { title: true },
@@ -104,43 +93,71 @@ Rules:
 - difficultyScore: how hard to research/script (0-100)
 - Only output JSON matching the schema.`;
 
-  const userPrompt = `Generate ${countToGenerate} viral short-form video topic(s) covering these categories: ${finalCategories.join(', ')}.
+  let created = 0;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts && created < countToGenerate; attempt++) {
+    // Build a fresh, diverse category list for this attempt
+    const requestedCategories: string[] = [];
+    for (const group of CONTENT_MIX) {
+      const shuffled = [...group.categories].sort(() => Math.random() - 0.5);
+      requestedCategories.push(...shuffled);
+    }
+    const shuffledAll = requestedCategories.sort(() => Math.random() - 0.5);
+    const candidateCategories = shuffledAll.slice(0, 4);
+
+    // Request extra candidates (at least 5) so duplicate filtering always leaves fresh options
+    const candidatesToRequest = Math.max(5, (countToGenerate - created) * 3);
+
+    await logToJob(jobId, `[Attempt ${attempt}/${maxAttempts}] Generating ${candidatesToRequest} candidate topics (Categories: ${candidateCategories.join(', ')})...`);
+
+    const userPrompt = `Generate ${candidatesToRequest} viral short-form video topic(s) covering these categories: ${candidateCategories.join(', ')}.
 
 CRITICAL DIVERSITY REQUIREMENT — DO NOT REPEAT PREVIOUS TOPICS:
 We have ALREADY created videos on all the following topics. You MUST NOT generate any topic about these subjects or anything remotely similar to them:
 ${excludedList || '(None yet)'}
 
+Seed timestamp: ${Date.now()}
 Every generated topic must be 100% FRESH, UNIQUE, UNEXPECTED, and NEVER COVERED BEFORE. Explore new historical curiosities, weird biology, psychological anomalies, or bizarre true incidents that are completely distinct from the list above.`;
 
-  const response = await generateStructuredLLM(systemPrompt, userPrompt, TopicsSchema, 'topics');
+    try {
+      const response = await generateStructuredLLM(systemPrompt, userPrompt, TopicsSchema, 'topics');
+      await logToJob(jobId, `LLM returned ${response.topics.length} candidate topics. Filtering duplicates...`);
 
-  await logToJob(jobId, `LLM returned ${response.topics.length} topics. Checking for duplicates...`);
+      for (const t of response.topics) {
+        if (created >= countToGenerate) break;
 
-  let created = 0;
-  for (const t of response.topics) {
-    const { isTooSimilar, maxScore, matchedTitle } = await checkTopicSimilarity(t.title, t.hook, data.userId || null);
-    if (isTooSimilar) {
-      await logToJob(jobId, `Skipped "${t.title}" — too similar to "${matchedTitle}" (${maxScore}% match).`);
-      continue;
-    }
+        const { isTooSimilar, maxScore, matchedTitle } = await checkTopicSimilarity(t.title, t.hook, data.userId || null);
+        if (isTooSimilar) {
+          await logToJob(jobId, `Skipped "${t.title}" — too similar to "${matchedTitle}" (${maxScore}% match).`);
+          continue;
+        }
 
-    const topic = await prisma.topic.create({
-      data: {
-        userId: data.userId || null,
-        title: t.title,
-        category: t.category,
-        hook: t.hook,
-        description: t.description,
-        viralityScore: t.viralityScore,
-        difficultyScore: t.difficultyScore,
-        status: 'PENDING',
-        language
+        const topic = await prisma.topic.create({
+          data: {
+            userId: data.userId || null,
+            title: t.title,
+            category: t.category,
+            hook: t.hook,
+            description: t.description,
+            viralityScore: t.viralityScore,
+            difficultyScore: t.difficultyScore,
+            status: 'PENDING',
+            language
+          }
+        });
+
+        await enqueueJob('RESEARCH_TOPIC', { topicId: topic.id });
+        await logToJob(jobId, `✓ Created topic: "${t.title}" [${t.category}] (similarity: ${maxScore}%)`);
+        created++;
       }
-    });
+    } catch (err: any) {
+      await logToJob(jobId, `Attempt ${attempt} error: ${err.message}`);
+    }
+  }
 
-    await enqueueJob('RESEARCH_TOPIC', { topicId: topic.id });
-    await logToJob(jobId, `✓ Created topic: "${t.title}" [${t.category}] (similarity: ${maxScore}%)`);
-    created++;
+  if (created === 0) {
+    throw new Error('Failed to generate a non-duplicate topic after 3 attempts. Pipeline will retry with backoff.');
   }
 
   await logToJob(jobId, `Done. Created ${created} new topics and enqueued research jobs.`);
