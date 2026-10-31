@@ -54,9 +54,6 @@ const prisma = new PrismaClient();
 async function init() {
   await prisma.setting.upsert({ where: { key: 'DAILY_VIDEO_LIMIT' }, update: { value: '50' }, create: { key: 'DAILY_VIDEO_LIMIT', value: '50' } });
   await prisma.setting.upsert({ where: { key: 'PROVIDER_MODE' }, update: {}, create: { key: 'PROVIDER_MODE', value: 'production' } });
-  await prisma.setting.upsert({ where: { key: 'SCHEDULE_MODE' }, update: {}, create: { key: 'SCHEDULE_MODE', value: 'active' } });
-  await prisma.setting.upsert({ where: { key: 'POSTING_SCHEDULE' }, update: {}, create: { key: 'POSTING_SCHEDULE', value: '09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00' } });
-  await prisma.setting.upsert({ where: { key: 'SCHEDULE_AUTO_GENERATE' }, update: {}, create: { key: 'SCHEDULE_AUTO_GENERATE', value: 'true' } });
   await prisma.setting.upsert({ where: { key: 'AUTO_PUBLISH' }, update: {}, create: { key: 'AUTO_PUBLISH', value: 'true' } });
   const creditRes = await prisma.user.updateMany({ where: { credits: { lt: 5 } }, data: { credits: 10 } });
   if (creditRes.count > 0) console.log('==> Granted starter credits to', creditRes.count, 'users');

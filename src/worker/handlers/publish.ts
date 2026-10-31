@@ -103,6 +103,15 @@ export async function handlePublishVideo(data: { videoId: string }, jobId: strin
       let remaining = parseInt(remainingStr, 10);
       const userId = (await getSetting('AUTOPILOT_USER_ID')) || video.script.topic.userId;
 
+      // Increment session published counter
+      const publishedStr = await getSetting('AUTOPILOT_PUBLISHED');
+      const currentPublished = (parseInt(publishedStr, 10) || 0) + 1;
+      await prisma.setting.upsert({
+        where: { key: 'AUTOPILOT_PUBLISHED' },
+        update: { value: currentPublished.toString() },
+        create: { key: 'AUTOPILOT_PUBLISHED', value: currentPublished.toString() }
+      });
+
       if (userId) {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         const hasCredits = user && user.credits > 0;
@@ -127,7 +136,7 @@ export async function handlePublishVideo(data: { videoId: string }, jobId: strin
 
           const remainingMsg = nextRemaining === -1 
             ? `running continuously until credits end (${user.credits - 1} credits left)`
-            : `${nextRemaining} video(s) remaining in batch`;
+            : `${nextRemaining} video(s) remaining in batch (${currentPublished} published so far)`;
 
           await logToJob(jobId, `[AUTOPILOT] Triggering next video (${remainingMsg})...`);
           await enqueueJob('GENERATE_TOPICS', { userId, count: 1 });
@@ -142,7 +151,12 @@ export async function handlePublishVideo(data: { videoId: string }, jobId: strin
             update: { value: '0' },
             create: { key: 'AUTOPILOT_REMAINING', value: '0' }
           });
-          await logToJob(jobId, `[AUTOPILOT] ✓ Auto-Pilot sequence completed! Batch target reached or credits exhausted.`);
+          await prisma.setting.upsert({
+            where: { key: 'AUTOPILOT_ERROR' },
+            update: { value: '' },
+            create: { key: 'AUTOPILOT_ERROR', value: '' }
+          });
+          await logToJob(jobId, `[AUTOPILOT] ✓ Auto-Pilot sequence completed! Total published: ${currentPublished}. Batch target reached or credits exhausted.`);
         }
       }
     }

@@ -16,23 +16,38 @@ export async function GET() {
     }
 
     const user = await getOrCreateUser(session.user);
-    const [status, remainingStr, totalStr, autoPublish] = await Promise.all([
+    const [status, remainingStr, totalStr, publishedStr, errorStr, autoPublish] = await Promise.all([
       getSetting('AUTOPILOT_STATUS'),
       getSetting('AUTOPILOT_REMAINING'),
       getSetting('AUTOPILOT_TOTAL'),
+      getSetting('AUTOPILOT_PUBLISHED'),
+      getSetting('AUTOPILOT_ERROR'),
       getSetting('AUTO_PUBLISH'),
     ]);
 
     const remaining = parseInt(remainingStr, 10) || 0;
     const total = parseInt(totalStr, 10) || 0;
+    const published = parseInt(publishedStr, 10) || 0;
+
+    // Check for an active job
+    const activeJob = await prisma.job.findFirst({
+      where: {
+        status: { in: ['PENDING', 'PROCESSING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, status: true, attemptCount: true, createdAt: true }
+    });
 
     return NextResponse.json({
       success: true,
       status: status || 'idle',
       remaining,
       total,
+      published,
+      error: errorStr || '',
       autoPublish: autoPublish === 'true',
       credits: user?.credits || 0,
+      activeJob: activeJob || null,
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -54,18 +69,64 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, count, mode, autoPublish } = body;
 
+    // Toggle Auto-Publish
     if (action === 'toggle_auto_publish') {
       const enabled = autoPublish ? 'true' : 'false';
       await setSetting('AUTO_PUBLISH', enabled);
       return NextResponse.json({ success: true, autoPublish: enabled === 'true' });
     }
 
+    // Stop Auto-Pilot completely
     if (action === 'stop') {
       await setSetting('AUTOPILOT_STATUS', 'idle');
       await setSetting('AUTOPILOT_REMAINING', '0');
+      await setSetting('AUTOPILOT_ERROR', '');
       return NextResponse.json({ success: true, message: 'Auto-Pilot has been stopped.' });
     }
 
+    // Pause Auto-Pilot
+    if (action === 'pause') {
+      await setSetting('AUTOPILOT_STATUS', 'paused');
+      return NextResponse.json({ success: true, message: 'Auto-Pilot paused.' });
+    }
+
+    // Resume Auto-Pilot
+    if (action === 'resume') {
+      if (user.credits < 1) {
+        return NextResponse.json(
+          { success: false, error: 'Insufficient credits. Please top up your credits to resume Auto-Pilot.' },
+          { status: 402 }
+        );
+      }
+
+      await setSetting('AUTOPILOT_STATUS', 'active');
+      await setSetting('AUTOPILOT_ERROR', '');
+
+      // Check if there is already a pending or processing job in queue
+      const existingJob = await prisma.job.findFirst({
+        where: {
+          name: { in: ['GENERATE_TOPICS', 'RESEARCH_TOPIC', 'GENERATE_SCRIPT', 'GENERATE_VOICE', 'GENERATE_VISUALS', 'RENDER_VIDEO', 'RUN_QA', 'PUBLISH_VIDEO'] },
+          status: { in: ['PENDING', 'PROCESSING'] }
+        }
+      });
+
+      if (!existingJob) {
+        // Deduct 1 credit and launch the next video
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { credits: { decrement: 1 } }
+        });
+        await enqueueJob('GENERATE_TOPICS', { userId: user.id, count: 1 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Auto-Pilot resumed! Next video generation in progress.',
+        status: 'active'
+      });
+    }
+
+    // Start Auto-Pilot
     if (action === 'start') {
       if (user.credits < 1) {
         return NextResponse.json(
@@ -91,7 +152,9 @@ export async function POST(req: Request) {
       await setSetting('AUTOPILOT_USER_ID', user.id);
       await setSetting('AUTOPILOT_REMAINING', targetCount.toString());
       await setSetting('AUTOPILOT_TOTAL', totalCount.toString());
-      await setSetting('AUTO_PUBLISH', 'true'); // Auto-publish is enabled during Auto-Pilot
+      await setSetting('AUTOPILOT_PUBLISHED', '0');
+      await setSetting('AUTOPILOT_ERROR', '');
+      await setSetting('AUTO_PUBLISH', 'true');
 
       // Deduct 1 credit for the very first video in the autonomous batch
       await prisma.user.update({

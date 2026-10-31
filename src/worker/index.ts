@@ -119,222 +119,37 @@ async function processNextJob() {
               feedback: error.message
             }
           });
-
-          // Safely pause Auto-Pilot if publishing failed
-          try {
-            const apStatus = await getSetting('AUTOPILOT_STATUS');
-            if (apStatus === 'active') {
-              await prisma.setting.upsert({
-                where: { key: 'AUTOPILOT_STATUS' },
-                update: { value: 'paused' },
-                create: { key: 'AUTOPILOT_STATUS', value: 'paused' }
-              });
-              await logToJob(job.id, `[AUTOPILOT] Paused Auto-Pilot sequence due to publishing error: ${error.message}`);
-            }
-          } catch (_) {}
         }
       }
-    }
-  }
-}
 
-async function executeScheduledSlot(slotTime: string, slotKey: string) {
-  try {
-    // Priority 1: Check for an already approved video created in the last 24 hours
-    const approvedVideo = await prisma.video.findFirst({
-      where: {
-        status: 'APPROVED',
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-      },
-      orderBy: { updatedAt: 'asc' }
-    });
+      // Safely pause Auto-Pilot & refund credit if any pipeline job failed permanently
+      try {
+        const apStatus = await getSetting('AUTOPILOT_STATUS');
+        if (apStatus === 'active') {
+          const userId = await getSetting('AUTOPILOT_USER_ID');
+          if (userId) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { credits: { increment: 1 } }
+            });
+            await logToJob(job.id, `[AUTOPILOT] Refunded 1 video credit to user ${userId} due to failure in ${job.name}.`);
+          }
 
-    if (approvedVideo) {
-      console.log(`[SCHEDULER] Publishing fresh approved video ${approvedVideo.id} at scheduled slot ${slotTime} IST...`);
-      await enqueueJob('PUBLISH_VIDEO', { videoId: approvedVideo.id });
-      await prisma.setting.upsert({
-        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
-        update: { value: 'completed' },
-        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
-      });
-      return;
-    }
-
-    // Priority 2: Check for a video waiting for approval created in the last 24 hours
-    const readyVideo = await prisma.video.findFirst({
-      where: {
-        status: 'READY_FOR_APPROVAL',
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-      },
-      orderBy: { updatedAt: 'asc' }
-    });
-
-    if (readyVideo) {
-      console.log(`[SCHEDULER] Fresh video ${readyVideo.id} is ready for approval. Auto-approving & publishing for slot ${slotTime} IST...`);
-      await prisma.approval.upsert({
-        where: { videoId: readyVideo.id },
-        update: { status: 'APPROVED', reviewer: 'Scheduler', approvedAt: new Date() },
-        create: { videoId: readyVideo.id, status: 'APPROVED', reviewer: 'Scheduler', approvedAt: new Date() }
-      });
-      await prisma.video.update({
-        where: { id: readyVideo.id },
-        data: { status: 'APPROVED' }
-      });
-      await prisma.script.update({
-        where: { id: readyVideo.scriptId },
-        data: { status: 'READY_FOR_PUBLISHING' }
-      });
-      await enqueueJob('PUBLISH_VIDEO', { videoId: readyVideo.id });
-      await prisma.setting.upsert({
-        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
-        update: { value: 'completed' },
-        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
-      });
-      return;
-    }
-
-    // Priority 3: Check if a video generation pipeline is already in progress
-    const activePipelineJob = await prisma.job.findFirst({
-      where: {
-        name: { in: ['GENERATE_TOPICS', 'RESEARCH_TOPIC', 'GENERATE_SCRIPT', 'GENERATE_VOICE', 'GENERATE_VISUALS', 'RENDER_VIDEO', 'RUN_QA', 'PUBLISH_VIDEO'] },
-        status: { in: ['PENDING', 'PROCESSING'] }
+          await prisma.setting.upsert({
+            where: { key: 'AUTOPILOT_STATUS' },
+            update: { value: 'paused' },
+            create: { key: 'AUTOPILOT_STATUS', value: 'paused' }
+          });
+          await prisma.setting.upsert({
+            where: { key: 'AUTOPILOT_ERROR' },
+            update: { value: `${job.name} failed: ${error.message}` },
+            create: { key: 'AUTOPILOT_ERROR', value: `${job.name} failed: ${error.message}` }
+          });
+          await logToJob(job.id, `[AUTOPILOT] Auto-Pilot sequence paused. Review the error and click Resume to continue.`);
+        }
+      } catch (apErr: any) {
+        console.error('[AUTOPILOT] Error handling failure:', apErr.message);
       }
-    });
-
-    if (activePipelineJob) {
-      console.log(`[SCHEDULER] A video pipeline is already active (${activePipelineJob.name}). Marking slot ${slotTime} as assigned; it will auto-publish upon QA pass.`);
-      await prisma.setting.upsert({
-        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
-        update: { value: 'completed' },
-        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
-      });
-      return;
-    }
-
-    // Priority 4: Queue is empty -> Hands-free on-demand generation and auto-publish
-    const autoGenSetting = await getSetting('SCHEDULE_AUTO_GENERATE');
-    if (autoGenSetting === 'false') {
-      console.log(`[SCHEDULER] Queue is empty and SCHEDULE_AUTO_GENERATE is disabled. Skipping slot.`);
-      return;
-    }
-
-    // Find the user to debit credits and link YouTube credentials
-    const autopilotUserId = await getSetting('AUTOPILOT_USER_ID');
-    let user = autopilotUserId 
-      ? await prisma.user.findUnique({ where: { id: autopilotUserId } })
-      : null;
-
-    if (!user || user.credits < 1) {
-      const ytCred = await prisma.oAuthCredential.findFirst({
-        where: { provider: 'youtube', userId: { not: null } },
-        orderBy: { updatedAt: 'desc' }
-      });
-      if (ytCred?.userId) {
-        user = await prisma.user.findUnique({ where: { id: ytCred.userId } });
-      }
-    }
-
-    if (!user || user.credits < 1) {
-      user = await prisma.user.findFirst({
-        where: { credits: { gte: 1 } },
-        orderBy: { updatedAt: 'desc' }
-      });
-    }
-
-    if (!user || user.credits < 1) {
-      console.warn(`[SCHEDULER] Scheduled slot ${slotTime} IST arrived, but no active user with credits found. Credits needed: 1.`);
-      await prisma.setting.upsert({
-        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
-        update: { value: 'insufficient_credits' },
-        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'insufficient_credits' }
-      });
-      return;
-    }
-
-    // Deduct 1 credit & trigger full autonomous pipeline with AUTO_PUBLISH enabled
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { credits: { decrement: 1 } }
-    });
-
-    await prisma.setting.upsert({
-      where: { key: 'AUTO_PUBLISH' },
-      update: { value: 'true' },
-      create: { key: 'AUTO_PUBLISH', value: 'true' }
-    });
-
-    await prisma.setting.upsert({
-      where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
-      update: { value: 'completed' },
-      create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'completed' }
-    });
-
-    console.log(`[SCHEDULER] 🚀 Hands-free scheduled generation triggered at ${slotTime} IST for ${user.name || user.email}! 1 credit used (${user.credits - 1} remaining). Full pipeline will craft and auto-publish short to YouTube.`);
-    await enqueueJob('GENERATE_TOPICS', { userId: user.id, count: 1 });
-  } catch (err: any) {
-    console.error(`[SCHEDULER] Error executing slot ${slotTime}:`, err.message);
-  }
-}
-
-async function runScheduler() {
-  const [isPaused, scheduleMode] = await Promise.all([
-    getSetting('AUTOMATION_PAUSED'),
-    getSetting('SCHEDULE_MODE')
-  ]);
-  if (isPaused === 'true' || scheduleMode === 'paused') return;
-
-  const scheduleStr = await getSetting('POSTING_SCHEDULE');
-  const times = scheduleStr
-    .split(',')
-    .map((t: string) => t.trim())
-    .filter(Boolean);
-
-  const now = new Date();
-  const timeFormatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  });
-  const currentTime = timeFormatter.format(now);
-
-  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  const todayDate = dateFormatter.format(now);
-
-  const [currHour, currMin] = currentTime.split(':').map(Number);
-  if (isNaN(currHour) || isNaN(currMin)) return;
-  const currMinutes = currHour * 60 + currMin;
-
-  for (const slotTime of times) {
-    const slotKey = `${todayDate}_${slotTime}`;
-    const [slotHour, slotMin] = slotTime.split(':').map(Number);
-    if (isNaN(slotHour) || isNaN(slotMin)) continue;
-
-    const slotMinutes = slotHour * 60 + slotMin;
-
-    // A slot is triggered if currentTime is within [slotMinutes, slotMinutes + 45]
-    // This allows recovery if the worker was busy processing another job or server restarted
-    if (currMinutes >= slotMinutes && currMinutes <= slotMinutes + 45) {
-      const slotRun = await getSetting(`SCHEDULE_SLOT_RUN_${slotKey}`);
-      if (slotRun === 'completed' || slotRun === 'processing') {
-        continue; // Already triggered today
-      }
-
-      // Mark processing to lock the slot
-      await prisma.setting.upsert({
-        where: { key: `SCHEDULE_SLOT_RUN_${slotKey}` },
-        update: { value: 'processing' },
-        create: { key: `SCHEDULE_SLOT_RUN_${slotKey}`, value: 'processing' }
-      });
-
-      console.log(`[SCHEDULER] ⏰ Scheduled posting time active: ${slotTime} IST (Key: ${slotKey}, current time: ${currentTime} IST)`);
-      await executeScheduledSlot(slotTime, slotKey);
-      break; // Run one slot per tick
     }
   }
 }
@@ -350,18 +165,6 @@ async function startWorker() {
   if (stuckJobs.count > 0) {
     console.log(`[WORKER] Reset ${stuckJobs.count} stuck PROCESSING jobs back to PENDING.`);
   }
-
-  // Independent scheduler loop every 5 seconds (never blocked by video rendering or FFmpeg!)
-  (async () => {
-    while (true) {
-      try {
-        await runScheduler();
-      } catch (err: any) {
-        console.error('[SCHEDULER] Unexpected scheduler loop error:', err.message);
-      }
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-  })();
 
   // Main queue processor loop
   while (true) {

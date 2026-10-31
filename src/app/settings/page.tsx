@@ -86,10 +86,11 @@ export default async function SettingsPage() {
         </div>
 
         <SettingCard 
-          title="Posting Schedule" 
-          description="Comma-separated list of times (HH:MM) to publish approved videos."
-          settingKey="POSTING_SCHEDULE"
-          currentValue={settings.POSTING_SCHEDULE}
+          title="Auto-Publish to YouTube" 
+          description="When enabled, videos rendered during Auto-Pilot will be uploaded straight to YouTube Shorts."
+          settingKey="AUTO_PUBLISH"
+          currentValue={settings.AUTO_PUBLISH || 'true'}
+          options={['true', 'false']}
         />
       </div>
     </div>

@@ -12,10 +12,6 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   DEFAULT_VOICE: 'pNInz6obpgDQGcFmaJgB',
   DEFAULT_TEMPLATE: 'GameplayFactsTemplate',
   DEFAULT_LLM_PROVIDER: 'auto', // 'auto' | 'openai' | 'gemini' | 'mock'
-  POSTING_SCHEDULE: '09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00, 23:00',
-  SCHEDULE_MODE: 'active', // 'active' | 'paused'
-  SCHEDULE_LAST_SLOT: '',
-  SCHEDULE_AUTO_GENERATE: 'true',
   AUTOMATION_PAUSED: 'false',
   CONTENT_STYLE: 'FAST_PACED',
   AUDIO_VOICE_VOLUME: '1.0',
@@ -27,6 +23,8 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   AUTOPILOT_USER_ID: '',
   AUTOPILOT_REMAINING: '0',
   AUTOPILOT_TOTAL: '0',
+  AUTOPILOT_PUBLISHED: '0',
+  AUTOPILOT_ERROR: '',
   // Content category weights (must sum to 10)
   CONTENT_MIX: JSON.stringify({
     trending: 3,
